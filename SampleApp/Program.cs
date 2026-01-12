@@ -1,0 +1,217 @@
+﻿using Microsoft.Extensions.DependencyInjection;
+using MyDbLib.Api;
+using MyDbLib.Core;
+using MyDbLib.Core.Extensions;        // AddMyDbLibCore
+using MyDbLib.Providers.MySql;        // AddMyDbLibMySql
+using MyDbLib.Providers.SqlServer;    // AddMyDbLibSqlServer
+using SampleApp.Models;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Threading.Tasks;
+
+namespace SampleApp
+{
+    class Program
+    {
+        static async Task Main(string[] args)
+        {
+            // v.imp
+            //object data = new { Username = "Sai1", Email = "sai12@gmail.com", PasswordHash = "sdsaddddadadad" };
+            //var props = data.GetType().GetProperties();
+            //var columns = props.Select(p => p.Name).ToList();
+            //foreach (var prop in props)
+            //{
+            //    Console.WriteLine(prop.Name + " - " + prop.GetValue(data));
+            //}
+            //return;
+            //
+
+            // 1️. Create DI container, this creates Empty box, Setup DI (composition root)
+            var services = new ServiceCollection();
+
+            // Core is registered
+            // Only ONE IDbDriverFactory is registered, No ambiguity. DI resolves by type, not by name.
+            services.AddMyDbLibCore();
+
+            // SQL Server provider is registered
+            // Adds a driver registration entry into DI
+            services.AddMyDbLibSqlServer(
+                name: "SQLServer",
+                connectionString: "Server=localhost;Database=ProjectDB;User Id=sa;Password=admin;Encrypt=False;"
+            );
+
+            // Adds another entry into a shared dictionary:
+            services.AddMyDbLibMySql(
+                name: "MySQL",
+                connectionString: "Server=localhost;Port=3307;Database=myprojectdb;Uid=root;Pwd=admin"
+            );
+
+            // Now the dictionary looks like: 
+            // "SQLServer" → SqlServerDriver factory
+            // "MySQL"     → MySqlDriver factory
+            // Still: No driver created, No driver chosen, Just registrations
+
+            // 3️. Build service provider
+            // With this, DI container is frozen and dictionary is complete and Factory knows all possible drivers
+            var provider = services.BuildServiceProvider();
+
+            // 4️. Resolve IDbDriverFactory (program to interface)
+            // Instantiates DbDriverFactory, Injects the dictionary into it
+            var factory = provider.GetRequiredService<IDbDriverFactory>();
+
+            // ONLY when you call this below happens
+            // Name → lookup in dictionary → invoke factory → create driver
+            var driverSQLServer = factory.Get("SQLServer");
+            var driverMySQL = factory.Get("MySQL");
+
+            using (var tx = await driverSQLServer.BeginTransactionAsync())
+            {
+                try
+                {
+                    // Insert user
+                    await tx.InsertAsync(
+                        "Users",
+                        new { Username = "Sai123", Email = "sai123@gmail.com", PasswordHash = "sdsaddddadadad" }
+                    );
+
+                    await tx.InsertAndGetIdAsync("Users",
+                        new { Username = "Sai123456", Email = "sai123456@gmail.com", PasswordHash = "sdsaddddadadad" }
+                        );
+
+                    await tx.CommitAsync();
+                }
+                catch (Exception ex)
+                {
+                    // Any failure → rollback
+                    await tx.RollbackAsync();
+
+                    Console.WriteLine("Transaction rolled back.");
+                    Console.WriteLine(ex.Message);
+                }
+            }
+            //return;
+
+            // 5️. Test connection
+            //bool ok = driver.TestConnectionAsync().GetAwaiter().GetResult();
+            //Console.WriteLine(ok ? "Connection successful" : "Connection failed");
+
+            // 6️. Execute SQL command
+            //var result = await driverSQLServer.ExecuteAsync("UPDATE Users SET Username = @NewName, UpdatedAt = @updateAt WHERE Username = @OldName"
+            //    , new { NewName = "Jayandra", OldName = "Jay", updateAt = DateTime.UtcNow });
+
+            // 7️. Handle execution result
+            //if (result.Success) Console.WriteLine($"Updated {result.AffectedRecords} rows");
+            //else Console.WriteLine($"Error {result.ErrorCode}: {result.ErrorMessage}");
+
+            //Execute SQL command
+            var result1 = await driverSQLServer.ExecuteAsync("INSERT INTO Users([Username],[Email],[PasswordHash],[CreatedAt]) VALUES(@UserName,@Email,@Pwd,@CreatedAt)",
+               new
+               {
+                   UserName = "shravani battu",
+                   Email = "shravani.battu@gmail.com",
+                   Pwd = "hash",
+                   CreatedAt = DateTime.UtcNow
+               });
+
+            if (result1.Success) Console.WriteLine($"Inserted {result1.AffectedRecords} rows");
+            else Console.WriteLine($"Error {result1.ErrorCode}: {result1.ErrorMessage}");
+
+            //var result2 = driver.QueryAsync("Select * From Users WHERE Username = @Name", new { Name = "Sai" }).GetAwaiter().GetResult();
+            var result2 = await driverSQLServer.QueryAsync("Select * From Users");
+
+            foreach (var row in result2)
+            {
+                Console.WriteLine($"{row["Id"]} - {row["Username"]} - {row["Email"]}");
+            }
+
+            var resultTyped = await driverSQLServer.QueryAsync<User>("Select * From Users");
+
+            foreach (var row in resultTyped)
+            {
+                Console.WriteLine($"{row.Id} - {row.Username} - {row.Email}");
+            }
+
+            var singleResultTyped = await driverSQLServer.QuerySingleAsync<User>("Select * From Users WHERE Username = @Name", new { Name = "Sai" });
+
+            if (singleResultTyped != null )
+            {
+                Console.WriteLine($"{singleResultTyped.Id} - {singleResultTyped.Username} - {singleResultTyped.Email}");
+            }
+            else
+            {
+                Console.WriteLine("User not found");
+            }
+
+            try
+            {
+                int userId = await driverSQLServer.InsertAndGetIdAsync(
+                    "Users",
+                    new { Username = "Sai1", Email = "sai12@gmail.com", PasswordHash = "sdsaddddadadad" }
+                    );
+                Console.WriteLine($"UserId returned: {userId}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("InsertAndGetIdAsync: " + ex.Message);
+            }
+
+            // UPDATE EXAMPLE
+            try
+            {
+                int updatedRows = await driverSQLServer.UpdateAsync(
+                    table: "Users",
+                    data: new
+                    {
+                        Username = "Jayandra",
+                        Email = "jayandra@gmail.com",
+                        UpdatedAt = DateTime.UtcNow
+                    },
+                    where: new
+                    {
+                        Id = 10
+                    }
+                );
+                Console.WriteLine($"Updated rows: {updatedRows}");
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("UpdateAsync: " + ex.Message);
+            }
+
+            // DELETE EXAMPLE
+            try
+            {
+                int deletedRows = await driverSQLServer.DeleteAsync(
+                    table: "Users",
+                    where: new
+                    {
+                        Id = 26
+                    }
+                );
+                Console.WriteLine($"Deleted rows: {deletedRows}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("DeleteAsync: " + ex.Message);
+            }
+
+            //
+            var resultMySQL = await driverMySQL.QueryAsync("Select * From dept");
+            Console.WriteLine("Department details from MySQL");
+            foreach (var row in resultMySQL)
+            {
+                Console.WriteLine($"{row["DeptId"]} - {row["DeptName"]} - {row["Location"]}");
+            }
+            //
+
+            Console.WriteLine();
+            Console.WriteLine("Press ENTER to exit...");
+            Console.ReadLine();
+        }
+    }
+}

@@ -1,0 +1,9 @@
+D:\Projects\MyDbLibrary\MyDbLib.Api\bin\Debug\MyDbLib.Api.dll
+D:\Projects\MyDbLibrary\MyDbLib.Api\bin\Debug\MyDbLib.Api.pdb
+D:\Projects\MyDbLibrary\MyDbLib.Api\bin\Debug\MyDbLib.Api.Models.dll
+D:\Projects\MyDbLibrary\MyDbLib.Api\bin\Debug\MyDbLib.Api.Models.pdb
+D:\Projects\MyDbLibrary\MyDbLib.Api\obj\Debug\MyDbLib.Api.csproj.AssemblyReference.cache
+D:\Projects\MyDbLibrary\MyDbLib.Api\obj\Debug\MyDbLib.Api.csproj.CoreCompileInputs.cache
+D:\Projects\MyDbLibrary\MyDbLib.Api\obj\Debug\MyDbLib..93BECC4A.Up2Date
+D:\Projects\MyDbLibrary\MyDbLib.Api\obj\Debug\MyDbLib.Api.dll
+D:\Projects\MyDbLibrary\MyDbLib.Api\obj\Debug\MyDbLib.Api.pdb
