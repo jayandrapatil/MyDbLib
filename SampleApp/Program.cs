@@ -159,7 +159,7 @@ namespace SampleApp
                 Console.WriteLine("InsertAndGetIdAsync: " + ex.Message);
             }
 
-            // UPDATE EXAMPLE
+            // UPDATE EXAMPLE...
             try
             {
                 int updatedRows = await driverSQLServer.UpdateAsync(
@@ -183,7 +183,7 @@ namespace SampleApp
                 Console.WriteLine("UpdateAsync: " + ex.Message);
             }
 
-            // DELETE EXAMPLE
+            // DELETE EXAMPLE...
             try
             {
                 int deletedRows = await driverSQLServer.DeleteAsync(
@@ -200,7 +200,7 @@ namespace SampleApp
                 Console.WriteLine("DeleteAsync: " + ex.Message);
             }
 
-            //
+            // testing for MySQL database
             var resultMySQL = await driverMySQL.QueryAsync("Select * From dept");
             Console.WriteLine("Department details from MySQL");
             foreach (var row in resultMySQL)
