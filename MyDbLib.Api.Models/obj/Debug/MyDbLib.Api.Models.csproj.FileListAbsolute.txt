@@ -1,6 +1,0 @@
-D:\Projects\MyDbLibrary\MyDbLib.Api.Models\bin\Debug\MyDbLib.Api.Models.dll
-D:\Projects\MyDbLibrary\MyDbLib.Api.Models\bin\Debug\MyDbLib.Api.Models.pdb
-D:\Projects\MyDbLibrary\MyDbLib.Api.Models\obj\Debug\MyDbLib.Api.Models.csproj.AssemblyReference.cache
-D:\Projects\MyDbLibrary\MyDbLib.Api.Models\obj\Debug\MyDbLib.Api.Models.csproj.CoreCompileInputs.cache
-D:\Projects\MyDbLibrary\MyDbLib.Api.Models\obj\Debug\MyDbLib.Api.Models.dll
-D:\Projects\MyDbLibrary\MyDbLib.Api.Models\obj\Debug\MyDbLib.Api.Models.pdb
