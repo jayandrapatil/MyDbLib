@@ -8,6 +8,7 @@ obj/
 *.suo
 *.cache
 *.log
+*.userprefs
 
 ## Rider / VS Code
 .idea/
@@ -17,5 +18,15 @@ obj/
 .DS_Store
 Thumbs.db
 
+## Test results
+TestResults/
+
+## Coverage
+coverage/
+coverage.*
+
 ## NuGet
 *.nupkg
+
+## Publish
+publish/
