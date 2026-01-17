@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using MyDbLib.Api;
+using MyDbLib.Api.Exceptions;
 using MyDbLib.Core;
 using MyDbLib.Core.Extensions;        // AddMyDbLibCore
 using MyDbLib.Providers.MySql;        // AddMyDbLibMySql
@@ -17,9 +18,24 @@ namespace SampleApp
 {
     class Program
     {
+        private static IReadOnlyList<string> GetPropertyNames(object obj, string errorMessage)
+        {
+            if (obj == null)
+                throw new DbLibException(errorMessage);
+
+            var props = obj.GetType().GetProperties();
+            if (props.Length == 0)
+                throw new DbLibException(errorMessage);
+
+            return props.Select(p => p.Name).ToList();
+        }
+
         static async Task Main(string[] args)
         {
             // v.imp
+            //object data = new { Username = "Sai1", Email = "sai12@gmail.com", PasswordHash = "sdsaddddadadad" };
+            //var columns = GetPropertyNames(data, "Insert data cannot be empty.");
+
             //object data = new { Username = "Sai1", Email = "sai12@gmail.com", PasswordHash = "sdsaddddadadad" };
             //var props = data.GetType().GetProperties();
             //var columns = props.Select(p => p.Name).ToList();
@@ -68,6 +84,17 @@ namespace SampleApp
             var driverSQLServer = factory.Get("SQLServer");
             var driverMySQL = factory.Get("MySQL");
 
+            #region Call method to return SINGLE TYPED data
+            var singleResultTyped = await driverSQLServer.QuerySingleAsync<User>("Select * From Users WHERE Username = @Name", new { Name = "Sai" });
+
+            if (singleResultTyped != null)
+                Console.WriteLine($"{singleResultTyped.Id} - {singleResultTyped.Username} - {singleResultTyped.Email}");
+            else
+                Console.WriteLine("User not found");
+            #endregion
+
+            #region Using Transaction
+            /*
             using (var tx = await driverSQLServer.BeginTransactionAsync())
             {
                 try
@@ -77,11 +104,12 @@ namespace SampleApp
                         "Users",
                         new { Username = "Sai123", Email = "sai123@gmail.com", PasswordHash = "sdsaddddadadad" }
                     );
-
-                    await tx.InsertAndGetIdAsync("Users",
+                    // Insert user and get Id back
+                    int id = await tx.InsertAndGetIdAsync("Users",
                         new { Username = "Sai123456", Email = "sai123456@gmail.com", PasswordHash = "sdsaddddadadad" }
                         );
 
+                    Console.WriteLine($"Id generated:{id}");
                     await tx.CommitAsync();
                 }
                 catch (Exception ex)
@@ -93,7 +121,9 @@ namespace SampleApp
                     Console.WriteLine(ex.Message);
                 }
             }
-            //return;
+            return;
+            */
+            #endregion
 
             // 5️. Test connection
             //bool ok = driver.TestConnectionAsync().GetAwaiter().GetResult();
@@ -107,7 +137,7 @@ namespace SampleApp
             //if (result.Success) Console.WriteLine($"Updated {result.AffectedRecords} rows");
             //else Console.WriteLine($"Error {result.ErrorCode}: {result.ErrorMessage}");
 
-            //Execute SQL command
+            #region Execute SQL command
             var result1 = await driverSQLServer.ExecuteAsync("INSERT INTO Users([Username],[Email],[PasswordHash],[CreatedAt]) VALUES(@UserName,@Email,@Pwd,@CreatedAt)",
                new
                {
@@ -119,7 +149,9 @@ namespace SampleApp
 
             if (result1.Success) Console.WriteLine($"Inserted {result1.AffectedRecords} rows");
             else Console.WriteLine($"Error {result1.ErrorCode}: {result1.ErrorMessage}");
+            #endregion
 
+            #region Call method to return data as Dictionary of string and object (i.e. Column Name and Data)
             //var result2 = driver.QueryAsync("Select * From Users WHERE Username = @Name", new { Name = "Sai" }).GetAwaiter().GetResult();
             var result2 = await driverSQLServer.QueryAsync("Select * From Users");
 
@@ -127,30 +159,23 @@ namespace SampleApp
             {
                 Console.WriteLine($"{row["Id"]} - {row["Username"]} - {row["Email"]}");
             }
+            #endregion
 
+            #region Call method to return TYPED data
             var resultTyped = await driverSQLServer.QueryAsync<User>("Select * From Users");
 
             foreach (var row in resultTyped)
             {
                 Console.WriteLine($"{row.Id} - {row.Username} - {row.Email}");
             }
+            #endregion
 
-            var singleResultTyped = await driverSQLServer.QuerySingleAsync<User>("Select * From Users WHERE Username = @Name", new { Name = "Sai" });
-
-            if (singleResultTyped != null )
-            {
-                Console.WriteLine($"{singleResultTyped.Id} - {singleResultTyped.Username} - {singleResultTyped.Email}");
-            }
-            else
-            {
-                Console.WriteLine("User not found");
-            }
-
+            #region INSERT example
             try
             {
                 int userId = await driverSQLServer.InsertAndGetIdAsync(
-                    "Users",
-                    new { Username = "Sai1", Email = "sai12@gmail.com", PasswordHash = "sdsaddddadadad" }
+                    table: "Users",
+                    data: new { Username = "Sai1", Email = "sai12@gmail.com", PasswordHash = "sdsaddddadadad" }
                     );
                 Console.WriteLine($"UserId returned: {userId}");
             }
@@ -158,22 +183,15 @@ namespace SampleApp
             {
                 Console.WriteLine("InsertAndGetIdAsync: " + ex.Message);
             }
+            #endregion
 
-            // UPDATE EXAMPLE...
+            #region UPDATE EXAMPLE...
             try
             {
                 int updatedRows = await driverSQLServer.UpdateAsync(
                     table: "Users",
-                    data: new
-                    {
-                        Username = "Jayandra",
-                        Email = "jayandra@gmail.com",
-                        UpdatedAt = DateTime.UtcNow
-                    },
-                    where: new
-                    {
-                        Id = 10
-                    }
+                    data: new { Username = "Jayandra", Email = "jayandra@gmail.com", UpdatedAt = DateTime.UtcNow },
+                    where: new { Id = 10 }
                 );
                 Console.WriteLine($"Updated rows: {updatedRows}");
 
@@ -182,16 +200,14 @@ namespace SampleApp
             {
                 Console.WriteLine("UpdateAsync: " + ex.Message);
             }
+            #endregion
 
-            // DELETE EXAMPLE...
+            #region DELETE EXAMPLE...
             try
             {
                 int deletedRows = await driverSQLServer.DeleteAsync(
                     table: "Users",
-                    where: new
-                    {
-                        Id = 26
-                    }
+                    where: new { Id = 26 }
                 );
                 Console.WriteLine($"Deleted rows: {deletedRows}");
             }
@@ -199,15 +215,16 @@ namespace SampleApp
             {
                 Console.WriteLine("DeleteAsync: " + ex.Message);
             }
+            #endregion
 
-            // testing for MySQL database
+            #region Testing for MySQL database
             var resultMySQL = await driverMySQL.QueryAsync("Select * From dept");
             Console.WriteLine("Department details from MySQL");
             foreach (var row in resultMySQL)
             {
                 Console.WriteLine($"{row["DeptId"]} - {row["DeptName"]} - {row["Location"]}");
             }
-            //
+            #endregion
 
             Console.WriteLine();
             Console.WriteLine("Press ENTER to exit...");

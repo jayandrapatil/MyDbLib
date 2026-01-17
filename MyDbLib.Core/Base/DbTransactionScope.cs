@@ -75,9 +75,8 @@ namespace MyDbLib.Core.Base
                 _transaction);
         }
 
-        // -----------------------------
-        // CRUD HELPERS
-        // -----------------------------
+
+        #region CRUD HELPERS
         public Task InsertAsync(string table, object data)
         {
             return _driver.InsertInternalAsync(
@@ -114,6 +113,7 @@ namespace MyDbLib.Core.Base
                 _connection,
                 _transaction);
         }
+        #endregion
 
         // -----------------------------
         // TRANSACTION CONTROL

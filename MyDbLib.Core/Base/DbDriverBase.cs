@@ -9,6 +9,7 @@ using System.Data;
 using System.Data.Common;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 
 namespace MyDbLib.Core.Base
@@ -320,12 +321,14 @@ namespace MyDbLib.Core.Base
             string table,
             object data)
         {
-            var (sql, parameters) = BuildInsertCommand(table, data, returnId: true);
+            var columns = GetPropertyNames(data, "Insert data cannot be empty.");
+            var sql = BuildInsertAndGetIdSql(table, columns);
+            //var (sql, parameters) = BuildInsertCommand(table, data, returnId: true);
 
             using (var connection = await OpenAsync())
             using (var command = CreateCommand(sql, connection))
             {
-                AddParameters(command, parameters);
+                AddParameters(command, data);
 
                 var result = await command.ExecuteScalarAsync();
                 return Convert.ToInt32(result);
@@ -448,35 +451,37 @@ namespace MyDbLib.Core.Base
         }
 
 
-        public async Task InsertAsync(string table, object data)
+        public async Task InsertAsync(string table, object parameters)
         {
+            var columns = GetPropertyNames(parameters, "Insert data cannot be empty.");
+            var sql = BuildInsertSql(table, columns);
+
             using (var connection = await OpenAsync())
+            using (var command = CreateCommand(sql, connection))
             {
-                await InsertInternalAsync(
-                    table,
-                    data,
-                    connection,
-                    transaction: null);
+                if (parameters != null)
+                    AddParameters(command, parameters);
+
+                await command.ExecuteNonQueryAsync();
             }
         }
 
-        internal async Task InsertInternalAsync(
-            string table,
-            object data,
-            DbConnection connection,
-            DbTransaction transaction)
+        internal async Task InsertInternalAsync(string table, object parameters, DbConnection connection, DbTransaction transaction)
         {
-            var columns = GetPropertyNames(data, "Insert data cannot be empty.");
+            var columns = GetPropertyNames(parameters, "Insert data cannot be empty.");
             var sql = BuildInsertSql(table, columns);
 
-            await ExecuteInternalAsync(sql, data, connection, transaction);
+            using (var command = CreateCommand(sql, connection))
+            {
+                command.Transaction = transaction;
+                if (parameters != null)
+                    AddParameters(command, parameters);
+
+                await command.ExecuteNonQueryAsync();
+            }
         }
 
-        internal async Task<int> ExecuteInternalAsync(
-            string sql,
-            object parameters,
-            DbConnection connection,
-            DbTransaction transaction)
+        internal async Task<int> ExecuteInternalAsync(string sql, object parameters, DbConnection connection, DbTransaction transaction)
         {
             using (var command = CreateCommand(sql, connection))
             {
