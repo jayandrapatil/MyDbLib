@@ -1,4 +1,5 @@
-﻿using MyDbLib.Core.Base;
+﻿using MyDbLib.Api.Interfaces;
+using MyDbLib.Core.Base;
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
@@ -12,8 +13,7 @@ namespace MyDbLib.Providers.SqlServer
     /// </summary>
     public sealed class SqlServerDriver : DbDriverBase
     {
-        public SqlServerDriver(string connectionString)
-            : base(connectionString)
+        public SqlServerDriver(string connectionString, IRetryPolicy retryPolicy) : base(connectionString, retryPolicy)
         {
         }
 

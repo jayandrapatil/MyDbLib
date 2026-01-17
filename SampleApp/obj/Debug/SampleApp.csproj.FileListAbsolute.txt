@@ -49,3 +49,4 @@ D:\Projects\MyDbLibrary\SampleApp\obj\Debug\SampleApp.csproj.CoreCompileInputs.c
 D:\Projects\MyDbLibrary\SampleApp\obj\Debug\SampleApp.csproj.Up2Date
 D:\Projects\MyDbLibrary\SampleApp\obj\Debug\SampleApp.exe
 D:\Projects\MyDbLibrary\SampleApp\obj\Debug\SampleApp.pdb
+D:\Projects\MyDbLibrary\SampleApp\obj\Debug\SampleApp.exe.config

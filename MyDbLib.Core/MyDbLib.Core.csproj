@@ -63,6 +63,7 @@
     <Compile Include="Factories\DbDriverFactory.cs" />
     <Compile Include="Factories\DbDriverRegistration.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Resilience\RetryPolicy.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MyDbLib.Api.Models\MyDbLib.Api.Models.csproj">

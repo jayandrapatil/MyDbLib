@@ -73,15 +73,20 @@ namespace SampleApp
 
             // 3️. Build service provider
             // With this, DI container is frozen and dictionary is complete and Factory knows all possible drivers
+            // still no objects created
             var provider = services.BuildServiceProvider();
 
             // 4️. Resolve IDbDriverFactory (program to interface)
             // Instantiates DbDriverFactory, Injects the dictionary into it
+            // IDbDriverFactory → DbDriverFactory (DbDriverFactory object is created, Stored as singleton)
             var factory = provider.GetRequiredService<IDbDriverFactory>();
 
             // ONLY when you call this below happens
             // Name → lookup in dictionary → invoke factory → create driver
+            // Now DI must create SqlServerDriver.
             var driverSQLServer = factory.Get("SQLServer");
+            
+            // Now DI must create MySQLDriver.
             var driverMySQL = factory.Get("MySQL");
 
             #region Call method to return SINGLE TYPED data
@@ -92,6 +97,7 @@ namespace SampleApp
             else
                 Console.WriteLine("User not found");
             #endregion
+            return;
 
             #region Using Transaction
             /*

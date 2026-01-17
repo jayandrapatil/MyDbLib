@@ -2,6 +2,7 @@
 using MyDbLib.Api.Exceptions;
 using MyDbLib.Api.Interfaces;
 using MyDbLib.Api.Models;
+using MyDbLib.Core.Resilience;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -18,12 +19,17 @@ namespace MyDbLib.Core.Base
     {
         protected string ConnectionString { get; }
 
-        protected DbDriverBase(string connectionString)
+        protected IRetryPolicy RetryPolicy { get; }
+
+        protected DbDriverBase(string connectionString, IRetryPolicy retryPolicy)
         {
             if (string.IsNullOrWhiteSpace(connectionString))
                 throw new DbLibException("Connection string cannot be empty.");
 
             ConnectionString = connectionString;
+
+            RetryPolicy = retryPolicy
+                ?? throw new ArgumentNullException(nameof(retryPolicy));
         }
 
         // ADO.NET
@@ -77,6 +83,9 @@ namespace MyDbLib.Core.Base
         // this is NOT abstract because, Opening is same for all DBs
         private DbCommand CreateCommand(string sql, DbConnection connection)
         {
+            if (string.IsNullOrWhiteSpace(sql))
+                throw new DbLibException("SQL cannot be empty.");
+
             if (connection == null)
                 throw new DbLibException("Connection is null.");
 
@@ -88,6 +97,9 @@ namespace MyDbLib.Core.Base
 
         protected virtual void AddParameters(DbCommand command, object parameters)
         {
+            if (parameters == null)
+                return;
+
             foreach (var prop in parameters.GetType().GetProperties())
             {
                 var param = command.CreateParameter();
@@ -116,20 +128,23 @@ namespace MyDbLib.Core.Base
 
             try
             {
-                using (var connection = await OpenAsync())
+                return await RetryPolicy.ExecuteAsync(async () =>
                 {
-                    var affected = await ExecuteInternalAsync(
-                        sql,
-                        parameters,
-                        connection,
-                        transaction: null);
-
-                    return new DbCommandResult
+                    using (var connection = await OpenAsync())
                     {
-                        Success = true,
-                        AffectedRecords = affected
-                    };
-                }
+                        var affected = await ExecuteInternalAsync(
+                            sql,
+                            parameters,
+                            connection,
+                            transaction: null);
+
+                        return new DbCommandResult
+                        {
+                            Success = true,
+                            AffectedRecords = affected
+                        };
+                    }
+                });
             }
             catch (DbException ex)
             {
@@ -153,17 +168,20 @@ namespace MyDbLib.Core.Base
 
         public async Task<IReadOnlyList<Dictionary<string, object>>> QueryAsync(string sql, object parameters = null)
         {
-            using (var connection = await OpenAsync()) // Creates a DbConnection, Opens it, Returns it, Connection is now open
-            using (var command = CreateCommand(sql, connection))
+            return await RetryPolicy.ExecuteAsync(async () =>
             {
-                if (parameters != null)
-                    AddParameters(command, parameters);
-
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var connection = await OpenAsync()) // Creates a DbConnection, Opens it, Returns it, Connection is now open
+                using (var command = CreateCommand(sql, connection))
                 {
-                    return MapToDictionaryList(reader);
+                    if (parameters != null)
+                        AddParameters(command, parameters);
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        return MapToDictionaryList(reader);
+                    }
                 }
-            }
+            });
         }
 
         private static List<Dictionary<string, object>> MapToDictionaryList(DbDataReader reader)
@@ -181,17 +199,20 @@ namespace MyDbLib.Core.Base
         }
         public async Task<IReadOnlyList<T>> QueryAsync<T>(string sql,object parameters = null) where T : new()
         {
-            using (var connection = await OpenAsync())
-            using (var command = CreateCommand(sql, connection))
+            return await RetryPolicy.ExecuteAsync(async () =>
             {
-                if (parameters != null)
-                    AddParameters(command, parameters);
-
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var connection = await OpenAsync())
+                using (var command = CreateCommand(sql, connection))
                 {
-                    return MapToList<T>(reader);
+                    if (parameters != null)
+                        AddParameters(command, parameters);
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        return MapToList<T>(reader);
+                    }
                 }
-            }
+            });
         }
 
         private static List<T> MapToList<T>(DbDataReader reader)
@@ -228,20 +249,23 @@ namespace MyDbLib.Core.Base
 
         public async Task<T?> QuerySingleAsync<T>(string sql,object? parameters = null) where T : new()
         {
-            using (var connection = await OpenAsync())
-            using (var command = CreateCommand(sql, connection))
+            return await RetryPolicy.ExecuteAsync(async () =>
             {
-                if (parameters != null)
-                    AddParameters(command, parameters);
-
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var connection = await OpenAsync())
+                using (var command = CreateCommand(sql, connection))
                 {
-                    if (!await reader.ReadAsync())
-                        return default; // null
+                    if (parameters != null)
+                        AddParameters(command, parameters);
 
-                    return Map<T>(reader);
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        if (!await reader.ReadAsync())
+                            return default; // null
+
+                        return Map<T>(reader);
+                    }
                 }
-            }
+            });
         }
 
         protected T Map<T>(DbDataReader reader) where T : new()
@@ -291,48 +315,25 @@ namespace MyDbLib.Core.Base
         // part of Template Method Pattern
         // BuildInsertSql and BuildInsertAndGetIdSql used here are abstract methods defined above
         // because the algorithm is identical and Only the SQL fragment varies
-        private (string Sql, object Parameters) BuildInsertCommand(
-            string table,
-            object data,
-            bool returnId)
-        {
-            if (string.IsNullOrWhiteSpace(table))
-                throw new DbLibException("Table name cannot be empty.");
-
-            if (data == null)
-                throw new DbLibException("Insert data cannot be null.");
-
-            var props = data.GetType().GetProperties();
-            if (props.Length == 0)
-                throw new DbLibException("Insert data has no properties.");
-
-            var columns = props.Select(p => p.Name).ToList();
-
-            var sql = returnId
-                ? BuildInsertAndGetIdSql(table, columns)
-                : BuildInsertSql(table, columns);
-
-            return (sql, data);
-        }
-
         // Template Method Pattern is used here
         // BuildInsertCommand is variable (generic) here
-        public async Task<int> InsertAndGetIdAsync(
-            string table,
-            object data)
+        public async Task<int> InsertAndGetIdAsync(string table, object data)
         {
-            var columns = GetPropertyNames(data, "Insert data cannot be empty.");
-            var sql = BuildInsertAndGetIdSql(table, columns);
-            //var (sql, parameters) = BuildInsertCommand(table, data, returnId: true);
-
-            using (var connection = await OpenAsync())
-            using (var command = CreateCommand(sql, connection))
+            return await RetryPolicy.ExecuteAsync(async () =>
             {
-                AddParameters(command, data);
+                var columns = GetPropertyNames(data, "Insert data cannot be empty.");
+                var sql = BuildInsertAndGetIdSql(table, columns);
+                //var (sql, parameters) = BuildInsertCommand(table, data, returnId: true);
 
-                var result = await command.ExecuteScalarAsync();
-                return Convert.ToInt32(result);
-            }
+                using (var connection = await OpenAsync())
+                using (var command = CreateCommand(sql, connection))
+                {
+                    AddParameters(command, data);
+
+                    var result = await command.ExecuteScalarAsync();
+                    return Convert.ToInt32(result);
+                }
+            });
         }
 
         private static IReadOnlyList<string> GetPropertyNames(object obj, string errorMessage)
@@ -347,50 +348,74 @@ namespace MyDbLib.Core.Base
             return props.Select(p => p.Name).ToList();
         }
 
+        public async Task InsertAsync(string table, object parameters)
+        {
+            await RetryPolicy.ExecuteAsync(async () =>
+            {
+                var columns = GetPropertyNames(parameters, "Insert data cannot be empty.");
+                var sql = BuildInsertSql(table, columns);
+
+                using (var connection = await OpenAsync())
+                using (var command = CreateCommand(sql, connection))
+                {
+                    if (parameters != null)
+                        AddParameters(command, parameters);
+
+                    await command.ExecuteNonQueryAsync();
+                }
+            });
+        }
+
         public async Task<int> UpdateAsync(
             string table,
             object data,
             object where)
         {
-            if (string.IsNullOrWhiteSpace(table))
-                throw new DbLibException("Table name cannot be empty.");
-
-            var setColumns = GetPropertyNames(data, "Update data cannot be null or empty.");
-            var whereColumns = GetPropertyNames(where, "WHERE clause is required for UPDATE.");
-
-            if (setColumns.Intersect(whereColumns, StringComparer.OrdinalIgnoreCase).Any())
-                throw new DbLibException("SET and WHERE columns must not overlap.");
-
-            var sql = BuildUpdateSql(table, setColumns, whereColumns);
-
-            using (var connection = await OpenAsync())
-            using (var command = CreateCommand(sql, connection))
+            return await RetryPolicy.ExecuteAsync(async () =>
             {
-                AddParameters(command, data);
-                AddParameters(command, where);
+                if (string.IsNullOrWhiteSpace(table))
+                    throw new DbLibException("Table name cannot be empty.");
 
-                return await command.ExecuteNonQueryAsync();
-            }
+                var setColumns = GetPropertyNames(data, "Update data cannot be null or empty.");
+                var whereColumns = GetPropertyNames(where, "WHERE clause is required for UPDATE.");
+
+                if (setColumns.Intersect(whereColumns, StringComparer.OrdinalIgnoreCase).Any())
+                    throw new DbLibException("SET and WHERE columns must not overlap.");
+
+                var sql = BuildUpdateSql(table, setColumns, whereColumns);
+
+                using (var connection = await OpenAsync())
+                using (var command = CreateCommand(sql, connection))
+                {
+                    AddParameters(command, data);
+                    AddParameters(command, where);
+
+                    return await command.ExecuteNonQueryAsync();
+                }
+            });
         }
 
         public async Task<int> DeleteAsync(
             string table,
             object where)
         {
-            if (string.IsNullOrWhiteSpace(table))
-                throw new DbLibException("Table name cannot be empty.");
-
-            var whereColumns = GetPropertyNames(where, "WHERE clause is required for DELETE.");
-
-            var sql = BuildDeleteSql(table, whereColumns);
-
-            using (var connection = await OpenAsync())
-            using (var command = CreateCommand(sql, connection))
+            return await RetryPolicy.ExecuteAsync(async () =>
             {
-                AddParameters(command, where);
+                if (string.IsNullOrWhiteSpace(table))
+                    throw new DbLibException("Table name cannot be empty.");
 
-                return await command.ExecuteNonQueryAsync();
-            }
+                var whereColumns = GetPropertyNames(where, "WHERE clause is required for DELETE.");
+
+                var sql = BuildDeleteSql(table, whereColumns);
+
+                using (var connection = await OpenAsync())
+                using (var command = CreateCommand(sql, connection))
+                {
+                    AddParameters(command, where);
+
+                    return await command.ExecuteNonQueryAsync();
+                }
+            });
         }
 
         internal async Task<IReadOnlyList<T>> QueryInternalAsync<T>(
@@ -450,21 +475,6 @@ namespace MyDbLib.Core.Base
             return list.Count == 0 ? default : list[0];
         }
 
-
-        public async Task InsertAsync(string table, object parameters)
-        {
-            var columns = GetPropertyNames(parameters, "Insert data cannot be empty.");
-            var sql = BuildInsertSql(table, columns);
-
-            using (var connection = await OpenAsync())
-            using (var command = CreateCommand(sql, connection))
-            {
-                if (parameters != null)
-                    AddParameters(command, parameters);
-
-                await command.ExecuteNonQueryAsync();
-            }
-        }
 
         internal async Task InsertInternalAsync(string table, object parameters, DbConnection connection, DbTransaction transaction)
         {

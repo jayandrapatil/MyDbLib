@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using MyDbLib.Api.Interfaces;
 using MyDbLib.Core.Factories;
 using System;
 
@@ -24,11 +25,14 @@ namespace MyDbLib.Providers.MySql
                 throw new ArgumentException("Connection string is required.", nameof(connectionString));
 
             // Register MySQL driver
-            services.AddSingleton<MySqlDriver>(_ =>
-                new MySqlDriver(connectionString)
-            );
+            services.AddSingleton<MySqlDriver>(sp =>
+            {
+                // Driver is created, stores RetryPolicy in base class and returned to factory.Get()
+                var retryPolicy = sp.GetRequiredService<IRetryPolicy>();
+                return new MySqlDriver(connectionString, retryPolicy);
+            });
 
-            // Register metadata for Core factory
+            // Register metadata for the Core factory
             services.AddSingleton(
                 new DbDriverRegistration(name, typeof(MySqlDriver))
             );

@@ -1,4 +1,5 @@
-﻿using MyDbLib.Core.Base;
+﻿using MyDbLib.Api.Interfaces;
+using MyDbLib.Core.Base;
 using MySql.Data.MySqlClient;
 using System;
 using System.Collections.Generic;
@@ -12,8 +13,7 @@ namespace MyDbLib.Providers.MySql
     /// </summary>
     public sealed class MySqlDriver : DbDriverBase
     {
-        public MySqlDriver(string connectionString)
-            : base(connectionString)
+        public MySqlDriver(string connectionString, IRetryPolicy retryPolicy) : base(connectionString, retryPolicy)
         {
         }
 
