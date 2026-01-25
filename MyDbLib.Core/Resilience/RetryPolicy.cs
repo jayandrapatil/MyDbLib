@@ -1,6 +1,10 @@
-﻿using MyDbLib.Api.Interfaces;
+﻿using MyDbLib.Api.Exceptions;
+using MyDbLib.Api.Interfaces;
+using MyDbLib.Api.Models;
 using System;
+using System.Data.Common;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace MyDbLib.Core.Resilience
@@ -23,7 +27,7 @@ namespace MyDbLib.Core.Resilience
             _delay = delay;
         }
 
-        // Operations that do NOT return a value like InsertAsync, DeleteAsync, tx.CommitAsync()
+        // ASYNC (no return)
         public async Task ExecuteAsync(Func<Task> action)
         {
             if (action == null)
@@ -36,7 +40,7 @@ namespace MyDbLib.Core.Resilience
             });
         }
 
-        // Operations that DO return a value like QueryAsync, InsertAndGetIdAsync, UpdateAsync
+        // ASYNC (with return)
         public async Task<T> ExecuteAsync<T>(Func<Task<T>> action)
         {
             if (action == null)
@@ -58,10 +62,28 @@ namespace MyDbLib.Core.Resilience
             }
         }
 
-        /// <summary>
-        /// Determines whether an exception is transient.
-        /// This logic is intentionally DB-agnostic.
-        /// </summary>
+        // SYNC
+        public T Execute<T>(Func<T> action)
+        {
+            if (action == null)
+                throw new ArgumentNullException(nameof(action));
+
+            int attempt = 0;
+
+            while (true)
+            {
+                try
+                {
+                    return action();
+                }
+                catch (Exception ex) when (IsTransient(ex) && attempt < _maxRetries)
+                {
+                    attempt++;
+                    Thread.Sleep(_delay);
+                }
+            }
+        }
+
         private static bool IsTransient(Exception ex)
         {
             if (ex == null)
@@ -78,4 +100,5 @@ namespace MyDbLib.Core.Resilience
                 || name.IndexOf("Connection", StringComparison.OrdinalIgnoreCase) >= 0;
         }
     }
+
 }

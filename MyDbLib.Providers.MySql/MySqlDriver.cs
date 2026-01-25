@@ -64,7 +64,7 @@ namespace MyDbLib.Providers.MySql
 
             var setClause = string.Join(", ", setColumns.Select(c => $"{c} = @{c}"));
 
-            var whereClause = string.Join(" AND ", whereColumns.Select(c => $"{c} = @{c}"));
+            var whereClause = string.Join(" AND ", whereColumns.Select(c => $"{c} = @w_{c}"));
 
             return $"UPDATE {table} SET {setClause} WHERE {whereClause};";
         }

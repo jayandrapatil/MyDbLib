@@ -174,7 +174,7 @@ namespace SampleApp
             //}
             #endregion
 
-            #region Call method to return TYPED data
+            #region Call Async Query method to return TYPED data
             //var resultTyped = await driverSQLServer.QueryAsync<User>("Select * From Users");
 
             //foreach (var row in resultTyped)
@@ -183,7 +183,7 @@ namespace SampleApp
             //}
             #endregion
 
-            #region INSERT example
+            #region Async INSERT example
             //try
             //{
             //    int userId = await driverSQLServer.InsertAndGetIdAsync(
@@ -198,13 +198,13 @@ namespace SampleApp
             //}
             #endregion
 
-            #region UPDATE EXAMPLE...
+            #region Async UPDATE EXAMPLE...
             //try
             //{
             //    int updatedRows = await driverSQLServer.UpdateAsync(
             //        table: "Users",
             //        data: new { Username = "Jayandra", Email = "jayandra@gmail.com", UpdatedAt = DateTime.UtcNow },
-            //        where: new { Id = 10 }
+            //        where: new { Username = "Sai123456" }
             //    );
             //    Console.WriteLine($"Updated rows: {updatedRows}");
 
@@ -215,7 +215,7 @@ namespace SampleApp
             //}
             #endregion
 
-            #region DELETE EXAMPLE...
+            #region Async DELETE EXAMPLE...
             //try
             //{
             //    int deletedRows = await driverSQLServer.DeleteAsync(
@@ -230,28 +230,113 @@ namespace SampleApp
             //}
             #endregion
 
-            #region Testing for MySQL database
-            Console.WriteLine("Commands executed against MySQL database");
-
-            #region Call method to return TYPED data
-            var resultMySQL = await driverMySQL.QueryAsync<Dept>("Select * From dept");
-            Console.WriteLine("Type Department rows from MySQL");
-            foreach (var row in resultMySQL)
+            #region Using Sync Transaction
+            using (var tx = driverSQLServer.BeginTransaction())
             {
-                Console.WriteLine($"{row.DeptId} - {row.DeptName} - {row.Location}");
+                try
+                {
+                    // Insert user
+                    tx.Insert(
+                        "Users",
+                        new { Username = "Battu2", Email = "battu2@gmail.com", PasswordHash = "sdsaddddadadad" }
+                    );
+
+                    var id = tx.InsertAndGetId(
+                        "Users",
+                        new { Username = "Battu3", Email = "battu3@gmail.com", PasswordHash = "sdsaddddadadad" }
+                    );
+
+                    tx.Commit();
+                }
+                catch (Exception ex)
+                {
+                    // Any failure → rollback
+                    await tx.RollbackAsync();
+
+                    Console.WriteLine("Transaction rolled back.");
+                    Console.WriteLine(ex.Message);
+                }
+            }
+            //return;
+            #endregion
+
+            #region Sync INSERT example
+            //try
+            //{
+            //    int userId = driverSQLServer.InsertAndGetId(
+            //        table: "Users",
+            //        data: new { Username = "Jay", Email = "Jay3129@gmail.com", PasswordHash = "sdsaddddadadad" }
+            //        );
+            //    Console.WriteLine($"UserId returned: {userId}");
+            //}
+            //catch (Exception ex)
+            //{
+            //    Console.WriteLine("InsertAndGetId: " + ex.Message);
+            //}
+            #endregion
+
+            #region Sync UPDATE EXAMPLE...
+            //try
+            //{
+            //    int updatedRows = driverSQLServer.Update(
+            //        table: "Users",
+            //        data: new { Username = "Jayu", Email = "Jay3129@gmail.com", UpdatedAt = DateTime.UtcNow },
+            //        where: new { Username = "Jay" }
+            //    );
+            //    Console.WriteLine($"Updated rows: {updatedRows}");
+            //}
+            //catch (Exception ex)
+            //{
+            //    Console.WriteLine("Update: " + ex.Message);
+            //}
+            #endregion
+
+            #region Sync DELETE EXAMPLE...
+            //try
+            //{
+            //    int deletedRows = driverSQLServer.Delete(
+            //        table: "Users",
+            //        where: new { Id = 1052 }
+            //    );
+            //    Console.WriteLine($"Deleted rows: {deletedRows}");
+            //}
+            //catch (Exception ex)
+            //{
+            //    Console.WriteLine("Delete: " + ex.Message);
+            //}
+            #endregion
+
+            #region Call Sync Query method to return TYPED data
+            var resultTyped = driverSQLServer.Query<User>("Select * From Users");
+
+            foreach (var row in resultTyped)
+            {
+                Console.WriteLine($"{row.Id} - {row.Username} - {row.Email}");
             }
             #endregion
 
-            #region Call method to return data as Dictionary of string and object (i.e. Column Name and Data)
-            Console.WriteLine();
-            Console.WriteLine();
-            var resultMySQL2 = await driverMySQL.QueryAsync("Select * From dept WHERE DeptId > @deptid", new { deptid = 3 });
-            //var resultMySQL2 = await driverSQLServer.QueryAsync("Select * From dept");
+            #region Testing for MySQL database
+            //Console.WriteLine("Commands executed against MySQL database");
 
-            foreach (var row in resultMySQL2)
-            {
-                Console.WriteLine($"{row["deptid"]} - {row["deptname"]} - {row["location"]}");
-            }
+            #region Call method to return TYPED data
+            //var resultMySQL = await driverMySQL.QueryAsync<Dept>("Select * From dept");
+            //Console.WriteLine("Type Department rows from MySQL");
+            //foreach (var row in resultMySQL)
+            //{
+            //    Console.WriteLine($"{row.DeptId} - {row.DeptName} - {row.Location}");
+            //}
+            #endregion
+
+            #region Call method to return data as Dictionary of string and object (i.e. Column Name and Data)
+            //Console.WriteLine();
+            //Console.WriteLine();
+            //var resultMySQL2 = await driverMySQL.QueryAsync("Select * From dept WHERE DeptId > @deptid", new { deptid = 3 });
+            ////var resultMySQL2 = await driverSQLServer.QueryAsync("Select * From dept");
+
+            //foreach (var row in resultMySQL2)
+            //{
+            //    Console.WriteLine($"{row["deptid"]} - {row["deptname"]} - {row["location"]}");
+            //}
             #endregion
             #endregion
 

@@ -21,5 +21,7 @@ namespace MyDbLib.Api.Interfaces
         /// Executes an async action with retry support and returns a value.
         /// </summary>
         Task<T> ExecuteAsync<T>(Func<Task<T>> action);
+
+        T Execute<T>(Func<T> action);
     }
 }
