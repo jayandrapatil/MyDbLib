@@ -18,18 +18,6 @@ namespace SampleApp
 {
     class Program
     {
-        private static IReadOnlyList<string> GetPropertyNames(object obj, string errorMessage)
-        {
-            if (obj == null)
-                throw new DbLibException(errorMessage);
-
-            var props = obj.GetType().GetProperties();
-            if (props.Length == 0)
-                throw new DbLibException(errorMessage);
-
-            return props.Select(p => p.Name).ToList();
-        }
-
         static async Task Main(string[] args)
         {
             // v.imp
@@ -85,19 +73,38 @@ namespace SampleApp
             // Name → lookup in dictionary → invoke factory → create driver
             // Now DI must create SqlServerDriver.
             var driverSQLServer = factory.Get("SQLServer");
-            
+            var driverSQLServer1 = factory.Get("SQLServer");
+            var driverSQLServer2 = factory.Get("SQLServer");
+            var driverSQLServer3 = factory.Get("SQLServer");
+
+            // below returning TRUE and 'InstanceCount' returning 1 shows the Singleton is working perfect
+            // to test this we add code in constructor of the SQL Server driver class
+            Console.WriteLine(ReferenceEquals(driverSQLServer, driverSQLServer1)); // True
+            Console.WriteLine(ReferenceEquals(driverSQLServer2, driverSQLServer3)); // True
+            Console.WriteLine($"No. of SQL Server Driver Instance: {SqlServerDriver.InstanceCount}");
+
             // Now DI must create MySQLDriver.
             var driverMySQL = factory.Get("MySQL");
+            var driverMySQL1 = factory.Get("MySQL");
+            var driverMySQL2 = factory.Get("MySQL");
+            var driverMySQL3 = factory.Get("MySQL");
+
+            // below returning TRUE and 'InstanceCount' returning 1 shows the Singleton is working perfect
+            // to test this we add code in constructor of the MySQL driver class
+            Console.WriteLine(ReferenceEquals(driverMySQL, driverMySQL1)); // True
+            Console.WriteLine(ReferenceEquals(driverMySQL2, driverMySQL3)); // True
+            Console.WriteLine($"No. of MySQL Driver Instance: {MySqlDriver.InstanceCount}");
+
 
             #region Call method to return SINGLE TYPED data
-            var singleResultTyped = await driverSQLServer.QuerySingleAsync<User>("Select * From Users WHERE Username = @Name", new { Name = "Sai" });
+            //var singleResultTyped = await driverSQLServer.QuerySingleAsync<User>("Select * From Users WHERE Username = @Name", new { Name = "Sai" });
 
-            if (singleResultTyped != null)
-                Console.WriteLine($"{singleResultTyped.Id} - {singleResultTyped.Username} - {singleResultTyped.Email}");
-            else
-                Console.WriteLine("User not found");
+            //if (singleResultTyped != null)
+            //    Console.WriteLine($"{singleResultTyped.Id} - {singleResultTyped.Username} - {singleResultTyped.Email}");
+            //else
+            //    Console.WriteLine("User not found");
             #endregion
-            return;
+            //return;
 
             #region Using Transaction
             /*
@@ -144,92 +151,108 @@ namespace SampleApp
             //else Console.WriteLine($"Error {result.ErrorCode}: {result.ErrorMessage}");
 
             #region Execute SQL command
-            var result1 = await driverSQLServer.ExecuteAsync("INSERT INTO Users([Username],[Email],[PasswordHash],[CreatedAt]) VALUES(@UserName,@Email,@Pwd,@CreatedAt)",
-               new
-               {
-                   UserName = "shravani battu",
-                   Email = "shravani.battu@gmail.com",
-                   Pwd = "hash",
-                   CreatedAt = DateTime.UtcNow
-               });
+            //var result1 = await driverSQLServer.ExecuteAsync("INSERT INTO Users([Username],[Email],[PasswordHash],[CreatedAt]) VALUES(@UserName,@Email,@Pwd,@CreatedAt)",
+            //   new
+            //   {
+            //       UserName = "shravani battu",
+            //       Email = "shravani.battu@gmail.com",
+            //       Pwd = "hash",
+            //       CreatedAt = DateTime.UtcNow
+            //   });
 
-            if (result1.Success) Console.WriteLine($"Inserted {result1.AffectedRecords} rows");
-            else Console.WriteLine($"Error {result1.ErrorCode}: {result1.ErrorMessage}");
+            //if (result1.Success) Console.WriteLine($"Inserted {result1.AffectedRecords} rows");
+            //else Console.WriteLine($"Error {result1.ErrorCode}: {result1.ErrorMessage}");
             #endregion
 
             #region Call method to return data as Dictionary of string and object (i.e. Column Name and Data)
             //var result2 = driver.QueryAsync("Select * From Users WHERE Username = @Name", new { Name = "Sai" }).GetAwaiter().GetResult();
-            var result2 = await driverSQLServer.QueryAsync("Select * From Users");
+            //var result2 = await driverSQLServer.QueryAsync("Select * From Users");
 
-            foreach (var row in result2)
-            {
-                Console.WriteLine($"{row["Id"]} - {row["Username"]} - {row["Email"]}");
-            }
+            //foreach (var row in result2)
+            //{
+            //    Console.WriteLine($"{row["Id"]} - {row["Username"]} - {row["Email"]}");
+            //}
             #endregion
 
             #region Call method to return TYPED data
-            var resultTyped = await driverSQLServer.QueryAsync<User>("Select * From Users");
+            //var resultTyped = await driverSQLServer.QueryAsync<User>("Select * From Users");
 
-            foreach (var row in resultTyped)
-            {
-                Console.WriteLine($"{row.Id} - {row.Username} - {row.Email}");
-            }
+            //foreach (var row in resultTyped)
+            //{
+            //    Console.WriteLine($"{row.Id} - {row.Username} - {row.Email}");
+            //}
             #endregion
 
             #region INSERT example
-            try
-            {
-                int userId = await driverSQLServer.InsertAndGetIdAsync(
-                    table: "Users",
-                    data: new { Username = "Sai1", Email = "sai12@gmail.com", PasswordHash = "sdsaddddadadad" }
-                    );
-                Console.WriteLine($"UserId returned: {userId}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("InsertAndGetIdAsync: " + ex.Message);
-            }
+            //try
+            //{
+            //    int userId = await driverSQLServer.InsertAndGetIdAsync(
+            //        table: "Users",
+            //        data: new { Username = "Sai1", Email = "sai12@gmail.com", PasswordHash = "sdsaddddadadad" }
+            //        );
+            //    Console.WriteLine($"UserId returned: {userId}");
+            //}
+            //catch (Exception ex)
+            //{
+            //    Console.WriteLine("InsertAndGetIdAsync: " + ex.Message);
+            //}
             #endregion
 
             #region UPDATE EXAMPLE...
-            try
-            {
-                int updatedRows = await driverSQLServer.UpdateAsync(
-                    table: "Users",
-                    data: new { Username = "Jayandra", Email = "jayandra@gmail.com", UpdatedAt = DateTime.UtcNow },
-                    where: new { Id = 10 }
-                );
-                Console.WriteLine($"Updated rows: {updatedRows}");
+            //try
+            //{
+            //    int updatedRows = await driverSQLServer.UpdateAsync(
+            //        table: "Users",
+            //        data: new { Username = "Jayandra", Email = "jayandra@gmail.com", UpdatedAt = DateTime.UtcNow },
+            //        where: new { Id = 10 }
+            //    );
+            //    Console.WriteLine($"Updated rows: {updatedRows}");
 
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("UpdateAsync: " + ex.Message);
-            }
+            //}
+            //catch (Exception ex)
+            //{
+            //    Console.WriteLine("UpdateAsync: " + ex.Message);
+            //}
             #endregion
 
             #region DELETE EXAMPLE...
-            try
-            {
-                int deletedRows = await driverSQLServer.DeleteAsync(
-                    table: "Users",
-                    where: new { Id = 26 }
-                );
-                Console.WriteLine($"Deleted rows: {deletedRows}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("DeleteAsync: " + ex.Message);
-            }
+            //try
+            //{
+            //    int deletedRows = await driverSQLServer.DeleteAsync(
+            //        table: "Users",
+            //        where: new { Id = 26 }
+            //    );
+            //    Console.WriteLine($"Deleted rows: {deletedRows}");
+            //}
+            //catch (Exception ex)
+            //{
+            //    Console.WriteLine("DeleteAsync: " + ex.Message);
+            //}
             #endregion
 
             #region Testing for MySQL database
-            var resultMySQL = await driverMySQL.QueryAsync("Select * From dept");
-            Console.WriteLine("Department details from MySQL");
+            Console.WriteLine("Commands executed against MySQL database");
+
+            #region Call method to return TYPED data
+            var resultMySQL = await driverMySQL.QueryAsync<Dept>("Select * From dept");
+            Console.WriteLine("Type Department rows from MySQL");
             foreach (var row in resultMySQL)
             {
-                Console.WriteLine($"{row["DeptId"]} - {row["DeptName"]} - {row["Location"]}");
+                Console.WriteLine($"{row.DeptId} - {row.DeptName} - {row.Location}");
             }
+            #endregion
+
+            #region Call method to return data as Dictionary of string and object (i.e. Column Name and Data)
+            Console.WriteLine();
+            Console.WriteLine();
+            var resultMySQL2 = await driverMySQL.QueryAsync("Select * From dept WHERE DeptId > @deptid", new { deptid = 3 });
+            //var resultMySQL2 = await driverSQLServer.QueryAsync("Select * From dept");
+
+            foreach (var row in resultMySQL2)
+            {
+                Console.WriteLine($"{row["deptid"]} - {row["deptname"]} - {row["location"]}");
+            }
+            #endregion
             #endregion
 
             Console.WriteLine();

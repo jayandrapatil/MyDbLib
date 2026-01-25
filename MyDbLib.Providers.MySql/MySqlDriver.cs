@@ -13,8 +13,13 @@ namespace MyDbLib.Providers.MySql
     /// </summary>
     public sealed class MySqlDriver : DbDriverBase
     {
+        public static int InstanceCount = 0;
         public MySqlDriver(string connectionString, IRetryPolicy retryPolicy) : base(connectionString, retryPolicy)
         {
+            // below is NOT required, but added this to verify the constructed in called only ONCE
+            // even though we have added deliberate multiple 'factory.Get("SQLServer");' in Program.cs
+            InstanceCount++;
+            Console.WriteLine("MySQLDriver created");
         }
 
         protected override DbConnection CreateConnection()
