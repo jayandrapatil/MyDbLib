@@ -181,10 +181,7 @@ namespace MyDbLib.Core.Base
             return new DbTransactionScope(this, connection, transaction);
         }
 
-
-        public async Task<DbCommandResult> ExecuteAsync(
-            string sql,
-            object parameters = null)
+        public async Task<DbCommandResult> ExecuteAsync(string sql, object parameters = null)
         {
             if (string.IsNullOrWhiteSpace(sql))
                 throw new DbLibException("SQL cannot be empty.");
@@ -276,34 +273,56 @@ namespace MyDbLib.Core.Base
 
         public async Task<IReadOnlyList<Dictionary<string, object>>> QueryAsync(string sql, object parameters = null)
         {
-            return await RetryPolicy.ExecuteAsync(async () =>
+            try
             {
-                using (var connection = await OpenAsync()) // Creates a DbConnection, Opens it, Returns it, Connection is now open
+                return await RetryPolicy.ExecuteAsync(async () =>
+                {
+                    using (var connection = await OpenAsync()) // Creates a DbConnection, Opens it, Returns it, Connection is now open
+                    using (var command = CreateCommand(sql, connection))
+                    {
+                        if (parameters != null)
+                            AddParameters(command, parameters);
+
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            return MapToDictionaryList(reader);
+                        }
+                    }
+                });
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async query failed.", ex);
+            }
+        }
+
+        public IReadOnlyList<Dictionary<string, object>> Query(string sql, object parameters = null)
+        {
+            try
+            {
+                using (var connection = Open())
                 using (var command = CreateCommand(sql, connection))
                 {
                     if (parameters != null)
                         AddParameters(command, parameters);
 
-                    using (var reader = await command.ExecuteReaderAsync())
+                    using (var reader = command.ExecuteReader())
                     {
                         return MapToDictionaryList(reader);
                     }
                 }
-            });
-        }
-
-        public IReadOnlyList<Dictionary<string, object>> Query(string sql, object parameters = null)
-        {
-            using (var connection = Open())
-            using (var command = CreateCommand(sql, connection))
+            }
+            catch (DbLibException)
             {
-                if (parameters != null)
-                    AddParameters(command, parameters);
-
-                using (var reader = command.ExecuteReader())
-                {
-                    return MapToDictionaryList(reader);
-                }
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database query failed.", ex);
             }
         }
 
@@ -320,36 +339,59 @@ namespace MyDbLib.Core.Base
             }
             return result;
         }
+       
         public async Task<IReadOnlyList<T>> QueryAsync<T>(string sql,object parameters = null) where T : new()
         {
-            return await RetryPolicy.ExecuteAsync(async () =>
+            try
             {
-                using (var connection = await OpenAsync())
+                return await RetryPolicy.ExecuteAsync(async () =>
+                {
+                    using (var connection = await OpenAsync())
+                    using (var command = CreateCommand(sql, connection))
+                    {
+                        if (parameters != null)
+                            AddParameters(command, parameters);
+
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            return MapToList<T>(reader);
+                        }
+                    }
+                });
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async query failed.", ex);
+            }
+        }
+
+        public IReadOnlyList<T> Query<T>(string sql, object parameters = null) where T : new()
+        {
+            try
+            {
+                using (var connection = Open())
                 using (var command = CreateCommand(sql, connection))
                 {
                     if (parameters != null)
                         AddParameters(command, parameters);
 
-                    using (var reader = await command.ExecuteReaderAsync())
+                    using (var reader = command.ExecuteReader())
                     {
                         return MapToList<T>(reader);
                     }
                 }
-            });
-        }
-
-        public IReadOnlyList<T> Query<T>(string sql, object parameters = null) where T : new()
-        {
-            using (var connection = Open())
-            using (var command = CreateCommand(sql, connection))
+            }
+            catch (DbLibException)
             {
-                if (parameters != null)
-                    AddParameters(command, parameters);
-
-                using (var reader = command.ExecuteReader())
-                {
-                    return MapToList<T>(reader);
-                }
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database query failed.", ex);
             }
         }
 
@@ -400,40 +442,62 @@ namespace MyDbLib.Core.Base
 
         public async Task<T?> QuerySingleAsync<T>(string sql,object? parameters = null) where T : new()
         {
-            return await RetryPolicy.ExecuteAsync(async () =>
+            try
             {
-                using (var connection = await OpenAsync())
+                return await RetryPolicy.ExecuteAsync(async () =>
+                {
+                    using (var connection = await OpenAsync())
+                    using (var command = CreateCommand(sql, connection))
+                    {
+                        if (parameters != null)
+                            AddParameters(command, parameters);
+
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            if (!await reader.ReadAsync())
+                                return default; // null
+
+                            return Map<T>(reader);
+                        }
+                    }
+                });
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async query single failed.", ex);
+            }
+        }
+
+        public T? QuerySingle<T>(string sql, object parameters = null) where T : new()
+        {
+            try
+            {
+                using (var connection = Open())
                 using (var command = CreateCommand(sql, connection))
                 {
                     if (parameters != null)
                         AddParameters(command, parameters);
 
-                    using (var reader = await command.ExecuteReaderAsync())
+                    using (var reader = command.ExecuteReader())
                     {
-                        if (!await reader.ReadAsync())
-                            return default; // null
+                        if (!reader.Read())
+                            return default;
 
                         return Map<T>(reader);
                     }
                 }
-            });
-        }
-
-        public T? QuerySingle<T>(string sql, object parameters = null) where T : new()
-        {
-            using (var connection = Open())
-            using (var command = CreateCommand(sql, connection))
+            }
+            catch (DbLibException)
             {
-                if (parameters != null)
-                    AddParameters(command, parameters);
-
-                using (var reader = command.ExecuteReader())
-                {
-                    if (!reader.Read())
-                        return default;
-
-                    return Map<T>(reader);
-                }
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database query single failed.", ex);
             }
         }
 
@@ -474,25 +538,14 @@ namespace MyDbLib.Core.Base
         }
 
         // Template Method Pattern
-        protected abstract string BuildInsertSql(
-            string table,
-            IReadOnlyList<string> columns);
+        protected abstract string BuildInsertSql(string table, IReadOnlyList<string> columns);
 
-        protected abstract string BuildInsertAndGetIdSql(
-            string table,
-            IReadOnlyList<string> columns);
+        protected abstract string BuildInsertAndGetIdSql(string table, IReadOnlyList<string> columns);
 
-        protected abstract string BuildUpdateSql(
-            string table,
-            IReadOnlyList<string> setColumns,
-            IReadOnlyList<string> whereColumns
+        protected abstract string BuildUpdateSql(string table, IReadOnlyList<string> setColumns, IReadOnlyList<string> whereColumns
         );
 
-        protected abstract string BuildDeleteSql(
-            string table,
-            IReadOnlyList<string> whereColumns
-        );
-
+        protected abstract string BuildDeleteSql(string table, IReadOnlyList<string> whereColumns);
 
         // part of Template Method Pattern
         // BuildInsertSql and BuildInsertAndGetIdSql used here are abstract methods defined above
@@ -501,40 +554,61 @@ namespace MyDbLib.Core.Base
         // BuildInsertCommand is variable (generic) here
         public async Task<int> InsertAndGetIdAsync(string table, object data)
         {
-            return await RetryPolicy.ExecuteAsync(async () =>
+            try
+            {
+                return await RetryPolicy.ExecuteAsync(async () =>
+                {
+                    ValidateTableName(table);
+
+                    var columns = GetPropertyNames(data, "Insert data cannot be empty.");
+                    var sql = BuildInsertAndGetIdSql(table, columns);
+                    //var (sql, parameters) = BuildInsertCommand(table, data, returnId: true);
+
+                    using (var connection = await OpenAsync())
+                    using (var command = CreateCommand(sql, connection))
+                    {
+                        AddParameters(command, data);
+                        var result = await command.ExecuteScalarAsync();
+                        return Convert.ToInt32(result);
+                    }
+                });
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async insert and get id failed.", ex);
+            }
+        }
+
+        public int InsertAndGetId(string table, object data)
+        {
+            try
             {
                 ValidateTableName(table);
 
                 var columns = GetPropertyNames(data, "Insert data cannot be empty.");
                 var sql = BuildInsertAndGetIdSql(table, columns);
-                //var (sql, parameters) = BuildInsertCommand(table, data, returnId: true);
 
-                using (var connection = await OpenAsync())
+                using (var connection = Open())
                 using (var command = CreateCommand(sql, connection))
                 {
                     AddParameters(command, data);
-                    var result = await command.ExecuteScalarAsync();
+                    var result = command.ExecuteScalar();
                     return Convert.ToInt32(result);
                 }
-            });
-        }
-
-        public int InsertAndGetId(string table, object data)
-        {
-            ValidateTableName(table);
-
-            var columns = GetPropertyNames(data, "Insert data cannot be empty.");
-            var sql = BuildInsertAndGetIdSql(table, columns);
-
-            using (var connection = Open())
-            using (var command = CreateCommand(sql, connection))
+            }
+            catch (DbLibException)
             {
-                AddParameters(command, data);
-                var result = command.ExecuteScalar();
-                return Convert.ToInt32(result);
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database insert and get id failed.", ex);
             }
         }
-
 
         private static IReadOnlyList<string> GetPropertyNames(object obj, string errorMessage)
         {
@@ -550,41 +624,96 @@ namespace MyDbLib.Core.Base
 
         public async Task InsertAsync(string table, object parameters)
         {
-            await RetryPolicy.ExecuteAsync(async () =>
+            try
             {
-                ValidateTableName(table);
-                var columns = GetPropertyNames(parameters, "Insert data cannot be empty.");
-                var sql = BuildInsertSql(table, columns);
-
-                using (var connection = await OpenAsync())
-                using (var command = CreateCommand(sql, connection))
+                await RetryPolicy.ExecuteAsync(async () =>
                 {
-                    if (parameters != null)
-                        AddParameters(command, parameters);
+                    ValidateTableName(table);
+                    var columns = GetPropertyNames(parameters, "Insert data cannot be empty.");
+                    var sql = BuildInsertSql(table, columns);
 
-                    await command.ExecuteNonQueryAsync();
-                }
-            });
+                    using (var connection = await OpenAsync())
+                    using (var command = CreateCommand(sql, connection))
+                    {
+                        if (parameters != null)
+                            AddParameters(command, parameters);
+
+                        await command.ExecuteNonQueryAsync();
+                    }
+                });
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async insert failed.", ex);
+            }
         }
 
         public void Insert(string table, object data)
         {
-            ValidateTableName(table);
-
-            var columns = GetPropertyNames(data, "Insert data cannot be empty.");
-            var sql = BuildInsertSql(table, columns);
-
-            using (var connection = Open())
-            using (var command = CreateCommand(sql, connection))
+            try
             {
-                AddParameters(command, data);
-                command.ExecuteNonQuery();
+                ValidateTableName(table);
+
+                var columns = GetPropertyNames(data, "Insert data cannot be empty.");
+                var sql = BuildInsertSql(table, columns);
+
+                using (var connection = Open())
+                using (var command = CreateCommand(sql, connection))
+                {
+                    AddParameters(command, data);
+                    command.ExecuteNonQuery();
+                }
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database insert failed.", ex);
             }
         }
 
         public async Task<int> UpdateAsync(string table, object data, object where)
         {
-            return await RetryPolicy.ExecuteAsync(async () =>
+            try
+            {
+                return await RetryPolicy.ExecuteAsync(async () =>
+                {
+                    ValidateTableName(table);
+
+                    var setColumns = GetPropertyNames(data, "Update data cannot be null or empty.");
+                    var whereColumns = GetPropertyNames(where, "WHERE clause is required for UPDATE.");
+
+                    var sql = BuildUpdateSql(table, setColumns, whereColumns);
+
+                    using (var connection = await OpenAsync())
+                    using (var command = CreateCommand(sql, connection))
+                    {
+                        AddParameters(command, data);
+                        AddParameters(command, where, "w_");
+
+                        return await command.ExecuteNonQueryAsync();
+                    }
+                });
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async update failed.", ex);
+            }
+        }
+
+        public int Update(string table, object data, object where)
+        {
+            try
             {
                 ValidateTableName(table);
 
@@ -593,132 +722,187 @@ namespace MyDbLib.Core.Base
 
                 var sql = BuildUpdateSql(table, setColumns, whereColumns);
 
-                using (var connection = await OpenAsync())
+                using (var connection = Open())
                 using (var command = CreateCommand(sql, connection))
                 {
                     AddParameters(command, data);
                     AddParameters(command, where, "w_");
 
-                    return await command.ExecuteNonQueryAsync();
+                    return command.ExecuteNonQuery();
                 }
-            });
-        }
-
-        public int Update(string table, object data, object where)
-        {
-            ValidateTableName(table);
-
-            var setColumns = GetPropertyNames(data, "Update data cannot be null or empty.");
-            var whereColumns = GetPropertyNames(where, "WHERE clause is required for UPDATE.");
-
-            var sql = BuildUpdateSql(table, setColumns, whereColumns);
-
-            using (var connection = Open())
-            using (var command = CreateCommand(sql, connection))
+            }
+            catch (DbLibException)
             {
-                AddParameters(command, data);
-                AddParameters(command, where, "w_");
-
-                return command.ExecuteNonQuery();
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database update failed.", ex);
             }
         }
 
         public async Task<int> DeleteAsync(string table, object where)
         {
-            return await RetryPolicy.ExecuteAsync(async () =>
+            try
             {
-                ValidateTableName(table);
-
-                var whereColumns = GetPropertyNames(where, "WHERE clause is required for DELETE.");
-
-                var sql = BuildDeleteSql(table, whereColumns);
-
-                using (var connection = await OpenAsync())
-                using (var command = CreateCommand(sql, connection))
+                return await RetryPolicy.ExecuteAsync(async () =>
                 {
-                    AddParameters(command, where);
+                    ValidateTableName(table);
 
-                    return await command.ExecuteNonQueryAsync();
-                }
-            });
+                    var whereColumns = GetPropertyNames(where, "WHERE clause is required for DELETE.");
+
+                    var sql = BuildDeleteSql(table, whereColumns);
+
+                    using (var connection = await OpenAsync())
+                    using (var command = CreateCommand(sql, connection))
+                    {
+                        AddParameters(command, where);
+
+                        return await command.ExecuteNonQueryAsync();
+                    }
+                });
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async delete failed.", ex);
+            }
         }
 
         public int Delete(string table, object where)
         {
-            ValidateTableName(table);
-
-            var whereColumns = GetPropertyNames(where, "WHERE clause is required for DELETE.");
-            var sql = BuildDeleteSql(table, whereColumns);
-
-            using (var connection = Open())
-            using (var command = CreateCommand(sql, connection))
+            try
             {
-                AddParameters(command, where);
-                return command.ExecuteNonQuery();
+                ValidateTableName(table);
+
+                var whereColumns = GetPropertyNames(where, "WHERE clause is required for DELETE.");
+                var sql = BuildDeleteSql(table, whereColumns);
+
+                using (var connection = Open())
+                using (var command = CreateCommand(sql, connection))
+                {
+                    AddParameters(command, where);
+                    return command.ExecuteNonQuery();
+                }
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database delete failed.", ex);
             }
         }
 
         internal async Task<IReadOnlyList<T>> QueryInternalAsync<T>(string sql, object parameters, DbConnection connection, DbTransaction transaction) where T : new()
         {
-            using (var command = CreateCommand(sql, connection))
+            try
             {
-                command.Transaction = transaction;
-
-                if (parameters != null)
-                    AddParameters(command, parameters);
-
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var command = CreateCommand(sql, connection))
                 {
-                    return MapToList<T>(reader);
+                    command.Transaction = transaction;
+
+                    if (parameters != null)
+                        AddParameters(command, parameters);
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        return MapToList<T>(reader);
+                    }
                 }
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async query failed.", ex);
             }
         }
 
         internal IReadOnlyList<T> QueryInternal<T>(string sql, object parameters, DbConnection connection, DbTransaction transaction) where T : new()
         {
-            using (var command = CreateCommand(sql, connection))
+            try
             {
-                command.Transaction = transaction;
-
-                if (parameters != null)
-                    AddParameters(command, parameters);
-
-                using (var reader = command.ExecuteReader())
+                using (var command = CreateCommand(sql, connection))
                 {
-                    return MapToList<T>(reader);
+                    command.Transaction = transaction;
+
+                    if (parameters != null)
+                        AddParameters(command, parameters);
+
+                    using (var reader = command.ExecuteReader())
+                    {
+                        return MapToList<T>(reader);
+                    }
                 }
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database query failed.", ex);
             }
         }
 
         internal async Task<IReadOnlyList<Dictionary<string, object>>> QueryInternalAsync(string sql, object parameters, DbConnection connection, DbTransaction transaction)
         {
-            using (var command = CreateCommand(sql, connection))
+            try
             {
-                command.Transaction = transaction;
-
-                if (parameters != null)
-                    AddParameters(command, parameters);
-
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var command = CreateCommand(sql, connection))
                 {
-                    return MapToDictionaryList(reader);
+                    command.Transaction = transaction;
+
+                    if (parameters != null)
+                        AddParameters(command, parameters);
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        return MapToDictionaryList(reader);
+                    }
                 }
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async query failed.", ex);
             }
         }
         
         internal IReadOnlyList<Dictionary<string, object>> QueryInternal(string sql, object parameters, DbConnection connection, DbTransaction transaction)
         {
-            using (var command = CreateCommand(sql, connection))
+            try
             {
-                command.Transaction = transaction;
-
-                if (parameters != null)
-                    AddParameters(command, parameters);
-
-                using (var reader = command.ExecuteReader())
+                using (var command = CreateCommand(sql, connection))
                 {
-                    return MapToDictionaryList(reader);
+                    command.Transaction = transaction;
+
+                    if (parameters != null)
+                        AddParameters(command, parameters);
+
+                    using (var reader = command.ExecuteReader())
+                    {
+                        return MapToDictionaryList(reader);
+                    }
                 }
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database query failed.", ex);
             }
         }
 
@@ -728,6 +912,7 @@ namespace MyDbLib.Core.Base
 
             return list.Count == 0 ? default : list[0];
         }
+        
         internal T? QuerySingleInternal<T>(string sql, object parameters, DbConnection connection, DbTransaction transaction) where T : new()
         {
             var list = QueryInternal<T>(
@@ -741,165 +926,274 @@ namespace MyDbLib.Core.Base
 
         internal async Task InsertInternalAsync(string table, object parameters, DbConnection connection, DbTransaction transaction)
         {
-            ValidateTableName(table);
-            var columns = GetPropertyNames(parameters, "Insert data cannot be empty.");
-            var sql = BuildInsertSql(table, columns);
-
-            using (var command = CreateCommand(sql, connection))
+            try
             {
-                command.Transaction = transaction;
-                if (parameters != null)
-                    AddParameters(command, parameters);
+                ValidateTableName(table);
+                var columns = GetPropertyNames(parameters, "Insert data cannot be empty.");
+                var sql = BuildInsertSql(table, columns);
 
-                await command.ExecuteNonQueryAsync();
+                using (var command = CreateCommand(sql, connection))
+                {
+                    command.Transaction = transaction;
+                    if (parameters != null)
+                        AddParameters(command, parameters);
+
+                    await command.ExecuteNonQueryAsync();
+                }
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async insert failed.", ex);
             }
         }
 
         internal void InsertInternal(string table, object parameters, DbConnection connection, DbTransaction transaction)
         {
-            ValidateTableName(table);
-            var columns = GetPropertyNames(parameters, "Insert data cannot be empty.");
-            var sql = BuildInsertSql(table, columns);
-
-            using (var command = CreateCommand(sql, connection))
+            try
             {
-                command.Transaction = transaction;
-                if (parameters != null)
-                    AddParameters(command, parameters);
+                ValidateTableName(table);
+                var columns = GetPropertyNames(parameters, "Insert data cannot be empty.");
+                var sql = BuildInsertSql(table, columns);
 
-                command.ExecuteNonQuery();
+                using (var command = CreateCommand(sql, connection))
+                {
+                    command.Transaction = transaction;
+                    if (parameters != null)
+                        AddParameters(command, parameters);
+
+                    command.ExecuteNonQuery();
+                }
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database insert failed.", ex);
             }
         }
 
         internal async Task<int> ExecuteInternalAsync(string sql, object parameters, DbConnection connection, DbTransaction transaction)
         {
-            using (var command = CreateCommand(sql, connection))
+            try
             {
-                command.Transaction = transaction;
+                using (var command = CreateCommand(sql, connection))
+                {
+                    command.Transaction = transaction;
 
-                if (parameters != null)
-                    AddParameters(command, parameters);
+                    if (parameters != null)
+                        AddParameters(command, parameters);
 
-                return await command.ExecuteNonQueryAsync();
+                    return await command.ExecuteNonQueryAsync();
+                }
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async execute failed.", ex);
             }
         }
 
         internal int ExecuteInternal(string sql, object parameters, DbConnection connection, DbTransaction transaction)
         {
-            using (var command = CreateCommand(sql, connection))
+            try
             {
-                command.Transaction = transaction;
+                using (var command = CreateCommand(sql, connection))
+                {
+                    command.Transaction = transaction;
 
-                if (parameters != null)
-                    AddParameters(command, parameters);
+                    if (parameters != null)
+                        AddParameters(command, parameters);
 
-                return command.ExecuteNonQuery();
+                    return command.ExecuteNonQuery();
+                }
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database execute failed.", ex);
             }
         }
 
         internal async Task<int> InsertAndGetIdInternalAsync(string table, object data, DbConnection connection, DbTransaction transaction)
         {
-            ValidateTableName(table);
-            var columns = GetPropertyNames(data, "Insert data cannot be empty.");
-            var sql = BuildInsertAndGetIdSql(table, columns);
-
-            using (var command = CreateCommand(sql, connection))
+            try
             {
-                command.Transaction = transaction;
-                AddParameters(command, data);
+                ValidateTableName(table);
+                var columns = GetPropertyNames(data, "Insert data cannot be empty.");
+                var sql = BuildInsertAndGetIdSql(table, columns);
 
-                var result = await command.ExecuteScalarAsync();
-                return Convert.ToInt32(result);
+                using (var command = CreateCommand(sql, connection))
+                {
+                    command.Transaction = transaction;
+                    AddParameters(command, data);
+
+                    var result = await command.ExecuteScalarAsync();
+                    return Convert.ToInt32(result);
+                }
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async insert and get id failed.", ex);
             }
         }
 
         internal int InsertAndGetIdInternal(string table, object data, DbConnection connection, DbTransaction transaction)
         {
-            ValidateTableName(table);
-            var columns = GetPropertyNames(data, "Insert data cannot be empty.");
-            var sql = BuildInsertAndGetIdSql(table, columns);
-
-            using (var command = CreateCommand(sql, connection))
+            try
             {
-                command.Transaction = transaction;
-                AddParameters(command, data);
+                ValidateTableName(table);
+                var columns = GetPropertyNames(data, "Insert data cannot be empty.");
+                var sql = BuildInsertAndGetIdSql(table, columns);
 
-                var result = command.ExecuteScalar();
-                return Convert.ToInt32(result);
+                using (var command = CreateCommand(sql, connection))
+                {
+                    command.Transaction = transaction;
+                    AddParameters(command, data);
+
+                    var result = command.ExecuteScalar();
+                    return Convert.ToInt32(result);
+                }
+            }
+            catch (DbLibException)
+            {
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database insert and get id failed.", ex);
             }
         }
 
         internal async Task<int> UpdateInternalAsync(string table, object data, object where, DbConnection connection, DbTransaction transaction)
         {
-            ValidateTableName(table);
+            try
+            { 
+                ValidateTableName(table);
 
-            var setColumns = GetPropertyNames(data, "Update data cannot be null or empty.");
-            var whereColumns = GetPropertyNames(where, "WHERE clause is required for UPDATE.");
+                var setColumns = GetPropertyNames(data, "Update data cannot be null or empty.");
+                var whereColumns = GetPropertyNames(where, "WHERE clause is required for UPDATE.");
 
-            var sql = BuildUpdateSql(table, setColumns, whereColumns);
+                var sql = BuildUpdateSql(table, setColumns, whereColumns);
 
-            using (var command = CreateCommand(sql, connection))
+                using (var command = CreateCommand(sql, connection))
+                {
+                    command.Transaction = transaction;
+                    AddParameters(command, data);
+                    AddParameters(command, where, "w_");
+
+                    return await command.ExecuteNonQueryAsync();
+                }
+            }
+            catch (DbLibException)
             {
-                command.Transaction = transaction;
-                AddParameters(command, data);
-                AddParameters(command, where, "w_");
-
-                return await command.ExecuteNonQueryAsync();
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async update failed.", ex);
             }
         }
 
         internal int UpdateInternal(string table, object data, object where, DbConnection connection, DbTransaction transaction)
         {
-            ValidateTableName(table);
+            try
+            { 
+                ValidateTableName(table);
 
-            var setColumns = GetPropertyNames(data, "Update data cannot be null or empty.");
-            var whereColumns = GetPropertyNames(where, "WHERE clause is required for UPDATE.");
+                var setColumns = GetPropertyNames(data, "Update data cannot be null or empty.");
+                var whereColumns = GetPropertyNames(where, "WHERE clause is required for UPDATE.");
 
-            var sql = BuildUpdateSql(table, setColumns, whereColumns);
+                var sql = BuildUpdateSql(table, setColumns, whereColumns);
 
-            using (var command = CreateCommand(sql, connection))
+                using (var command = CreateCommand(sql, connection))
+                {
+                    command.Transaction = transaction;
+                    AddParameters(command, data);
+                    AddParameters(command, where, "w_");
+
+                    return command.ExecuteNonQuery();
+                }
+            }
+            catch (DbLibException)
             {
-                command.Transaction = transaction;
-                AddParameters(command, data);
-                AddParameters(command, where, "w_");
-
-                return command.ExecuteNonQuery();
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database update failed.", ex);
             }
         }
 
         internal async Task<int> DeleteInternalAsync(string table, object where, DbConnection connection, DbTransaction transaction)
         {
-            ValidateTableName(table);
+            try
+            { 
+                ValidateTableName(table);
 
-            var whereColumns = GetPropertyNames(where, "WHERE clause is required for DELETE.");
+                var whereColumns = GetPropertyNames(where, "WHERE clause is required for DELETE.");
 
-            var sql = BuildDeleteSql(table, whereColumns);
+                var sql = BuildDeleteSql(table, whereColumns);
 
-            using (var command = CreateCommand(sql, connection))
+                using (var command = CreateCommand(sql, connection))
+                {
+                    command.Transaction = transaction;
+                    AddParameters(command, where);
+
+                    return await command.ExecuteNonQueryAsync();
+                }
+            }
+            catch (DbLibException)
             {
-                command.Transaction = transaction;
-                AddParameters(command, where);
-
-                return await command.ExecuteNonQueryAsync();
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database async delete failed.", ex);
             }
         }
 
         internal int DeleteInternal(string table, object where, DbConnection connection, DbTransaction transaction)
         {
-            ValidateTableName(table);
+            try 
+            { 
+                ValidateTableName(table);
 
-            var whereColumns = GetPropertyNames(where, "WHERE clause is required for DELETE.");
+                var whereColumns = GetPropertyNames(where, "WHERE clause is required for DELETE.");
 
-            var sql = BuildDeleteSql(table, whereColumns);
+                var sql = BuildDeleteSql(table, whereColumns);
 
-            using (var command = CreateCommand(sql, connection))
+                using (var command = CreateCommand(sql, connection))
+                {
+                    command.Transaction = transaction;
+                    AddParameters(command, where);
+
+                    return command.ExecuteNonQuery();
+                }
+            }
+            catch (DbLibException)
             {
-                command.Transaction = transaction;
-                AddParameters(command, where);
-
-                return command.ExecuteNonQuery();
+                throw; // already normalized
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException("Database delete failed.", ex);
             }
         }
-
     }
 }

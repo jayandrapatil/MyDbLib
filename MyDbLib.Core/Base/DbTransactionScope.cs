@@ -111,7 +111,6 @@ namespace MyDbLib.Core.Base
         }
         #endregion
 
-
         #region Async TRANSACTION CONTROL
         public Task CommitAsync()
         {
