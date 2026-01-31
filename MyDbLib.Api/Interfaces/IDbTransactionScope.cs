@@ -9,7 +9,7 @@ namespace MyDbLib.Api.Interfaces
 {
     public interface IDbTransactionScope : IDisposable
     {
-        #region Async methods
+        // RAW execution only
         Task<int> ExecuteAsync(string sql, object parameters = null);
 
         Task<IReadOnlyList<T>> QueryAsync<T>(string sql, object parameters = null) where T : new();
@@ -18,19 +18,11 @@ namespace MyDbLib.Api.Interfaces
 
         Task<T?> QuerySingleAsync<T>(string sql, object parameters = null) where T : new();
 
-        Task InsertAsync(string table, object data);
-
-        Task<int> InsertAndGetIdAsync(string table, object data);
-
-        Task<int> UpdateAsync(string table, object data, object where);
-
-        Task<int> DeleteAsync(string table, object where);
-
+        // Transaction
         Task CommitAsync();
         Task RollbackAsync();
-        #endregion
 
-        #region Sync methods
+        // Sync
         int Execute(string sql, object parameters = null);
 
         IReadOnlyList<T> Query<T>(string sql, object parameters = null) where T : new();
@@ -39,16 +31,7 @@ namespace MyDbLib.Api.Interfaces
 
         T? QuerySingle<T>(string sql, object parameters = null) where T : new();
 
-        void Insert(string table, object data);
-
-        int InsertAndGetId(string table, object data);
-
-        int Update(string table, object data, object where);
-
-        int Delete(string table, object where);
-
         void Commit();
         void Rollback();
-        #endregion
     }
 }

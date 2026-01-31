@@ -12,5 +12,27 @@ namespace MyDbLib.Api.Models
         public int AffectedRecords { get; set; }
         public string ErrorCode { get; set; }
         public string ErrorMessage { get; set; }
+
+        // Success factory
+        public static DbCommandResult Ok(int affected)
+        {
+            return new DbCommandResult
+            {
+                Success = true,
+                AffectedRecords = affected
+            };
+        }
+
+        // Failure factory
+        public static DbCommandResult Fail(string code, string message)
+        {
+            return new DbCommandResult
+            {
+                Success = false,
+                ErrorCode = code,
+                ErrorMessage = message
+            };
+        }
     }
+
 }
