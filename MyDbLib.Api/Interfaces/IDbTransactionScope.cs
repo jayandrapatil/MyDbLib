@@ -18,6 +18,10 @@ namespace MyDbLib.Api.Interfaces
 
         Task<T?> QuerySingleAsync<T>(string sql, object parameters = null) where T : new();
 
+        // INSERT + ID
+        Task<int> InsertAndGetIdAsync(string sql, object parameters = null);
+        int InsertAndGetId(string sql, object parameters = null);
+
         // Transaction
         Task CommitAsync();
         Task RollbackAsync();

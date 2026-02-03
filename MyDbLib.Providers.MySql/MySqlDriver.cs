@@ -13,6 +13,8 @@ namespace MyDbLib.Providers.MySql
     {
         public static int InstanceCount = 0;
 
+        protected override string IdentitySelectSql => "SELECT LAST_INSERT_ID();";
+
         public MySqlDriver(
             string connectionString,
             IRetryPolicy retryPolicy)

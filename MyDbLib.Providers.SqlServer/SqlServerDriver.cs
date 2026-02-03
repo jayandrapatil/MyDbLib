@@ -13,6 +13,8 @@ namespace MyDbLib.Providers.SqlServer
     {
         public static int InstanceCount = 0;
 
+        protected override string IdentitySelectSql => "SELECT CAST(SCOPE_IDENTITY() AS INT);";
+
         public SqlServerDriver(
             string connectionString,
             IRetryPolicy retryPolicy)

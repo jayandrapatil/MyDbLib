@@ -12,7 +12,6 @@ namespace MyDbLib.Core.Helpers
     public static class DbCrudHelper
     {
         #region INSERT
-
         // ASYNC
         public static async Task InsertAsync(IDbDriver driver, string table, object data)
         {
@@ -30,6 +29,12 @@ namespace MyDbLib.Core.Helpers
         {
             var (sql, parameters) = BuildInsertAndGetId(table, data);
             return await driver.InsertAndGetIdAsync(sql, parameters);
+        }
+
+        public static async Task<int> InsertAndGetIdAsync(IDbTransactionScope tx, string table, object data)
+        {
+            var (sql, parameters) = BuildInsertAndGetId(table, data);
+            return await tx.InsertAndGetIdAsync(sql, parameters);
         }
 
         // SYNC
@@ -51,10 +56,14 @@ namespace MyDbLib.Core.Helpers
             return driver.InsertAndGetId(sql, parameters);
         }
 
+        public static int InsertAndGetId(IDbTransactionScope tx, string table, object data)
+        {
+            var (sql, parameters) = BuildInsertAndGetId(table, data);
+            return tx.InsertAndGetId(sql, parameters);
+        }
         #endregion
 
         #region UPDATE
-
         // ASYNC
         public static async Task<int> UpdateAsync(IDbDriver driver, string table, object data, object where)
         {
@@ -82,11 +91,9 @@ namespace MyDbLib.Core.Helpers
             var (sql, parameters) = BuildUpdate(table, data, where);
             return tx.Execute(sql, parameters);
         }
-
         #endregion
 
         #region DELETE
-
         // ASYNC
         public static async Task<int> DeleteAsync(IDbDriver driver, string table, object where)
         {
@@ -114,11 +121,9 @@ namespace MyDbLib.Core.Helpers
             var (sql, parameters) = BuildDelete(table, where);
             return tx.Execute(sql, parameters);
         }
-
         #endregion
 
         #region SQL BUILDERS
-
         public static (string sql, object parameters) BuildInsert(string table, object data)
         {
             ValidateTable(table);
@@ -141,7 +146,7 @@ namespace MyDbLib.Core.Helpers
             var sql = $@"
                 INSERT INTO {table} ({cols})
                 VALUES ({vals});
-                SELECT CAST(SCOPE_IDENTITY() AS INT);";
+                {{IDENTITY}}";
 
             return (sql, data);
         }
@@ -175,11 +180,9 @@ namespace MyDbLib.Core.Helpers
 
             return (sql, where);
         }
-
         #endregion
 
         #region UTIL
-
         private static PropertyInfo[] GetProps(object obj)
         {
             if (obj == null)
@@ -201,7 +204,6 @@ namespace MyDbLib.Core.Helpers
             if (string.IsNullOrWhiteSpace(table))
                 throw new DbLibException("Table name cannot be empty.");
         }
-
         #endregion
     }
 }

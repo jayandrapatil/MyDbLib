@@ -80,6 +80,17 @@ namespace MyDbLib.Core.Base
             return list.Count == 0 ? default : list[0];
         }
 
+        public Task<int> InsertAndGetIdAsync(string sql, object parameters = null)
+        {
+            return _driver.InsertAndGetIdInternalAsync(
+                sql, parameters, _connection, _transaction);
+        }
+
+        public int InsertAndGetId(string sql, object parameters = null)
+        {
+            return _driver.InsertAndGetIdInternal(
+                sql, parameters, _connection, _transaction);
+        }
         #endregion
 
         #region TRANSACTION CONTROL

@@ -18,6 +18,8 @@ namespace MyDbLib.Core.Base
         protected string ConnectionString { get; }
         protected IRetryPolicy RetryPolicy { get; }
 
+        protected virtual string IdentitySelectSql => "SELECT SCOPE_IDENTITY();";
+
         protected DbDriverBase(string connectionString, IRetryPolicy retryPolicy)
         {
             if (string.IsNullOrWhiteSpace(connectionString))
@@ -27,6 +29,32 @@ namespace MyDbLib.Core.Base
             RetryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
         }
 
+        #region SAFETY
+        protected async Task<T> SafeAsync<T>(Func<Task<T>> action)
+        {
+            try
+            {
+                return await RetryPolicy.ExecuteAsync(action);
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException($"Database operation failed: {ex.Message}", ex);
+            }
+        }
+
+        protected T Safe<T>(Func<T> action)
+        {
+            try
+            {
+                return RetryPolicy.Execute(action);
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException($"Database operation failed: {ex.Message}", ex);
+            }
+        }
+
+        #endregion
         protected abstract DbConnection CreateConnection();
 
         protected async Task<DbConnection> OpenAsync()
@@ -58,7 +86,21 @@ namespace MyDbLib.Core.Base
         {
             if (parameters == null) return;
 
-            foreach (var prop in parameters.GetType().GetProperties())
+            // Case 1: Dictionary<string, object>
+            if (parameters is IDictionary<string, object> dict)
+            {
+                foreach (var kv in dict)
+                {
+                    var p = command.CreateParameter();
+                    p.ParameterName = "@" + kv.Key;
+                    p.Value = kv.Value ?? DBNull.Value;
+                    command.Parameters.Add(p);
+                }
+                return;
+            }
+
+            // Case 2: Anonymous / POCO object
+            foreach (var prop in parameters.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
                 var p = command.CreateParameter();
                 p.ParameterName = "@" + prop.Name;
@@ -85,84 +127,102 @@ namespace MyDbLib.Core.Base
 
         #endregion
 
-        #region RAW EXECUTION (RETRY ONLY HERE)
+        #region RAW EXECUTION (SAFE + RETRY)
 
-        public async Task<DbCommandResult> ExecuteAsync(string sql, object parameters = null)
+        public Task<DbCommandResult> ExecuteAsync(string sql, object parameters = null)
         {
-            return await RetryPolicy.ExecuteAsync(async () =>
+            return SafeRawAsync(async () =>
             {
                 using var conn = await OpenAsync();
-                var affected = await ExecuteInternalAsync(sql, parameters, conn, null);
-                return DbCommandResult.Ok(affected);
+                return await ExecuteInternalAsync(sql, parameters, conn, null);
             });
         }
 
         public DbCommandResult Execute(string sql, object parameters = null)
         {
-            return RetryPolicy.Execute(() =>
+            return SafeRaw(() =>
             {
                 using var conn = Open();
-                var affected = ExecuteInternal(sql, parameters, conn, null);
-                return DbCommandResult.Ok(affected);
+                return ExecuteInternal(sql, parameters, conn, null);
             });
         }
 
         public async Task<int> InsertAndGetIdAsync(string sql, object parameters = null)
         {
-            using var conn = await OpenAsync();
-            using var cmd = CreateCommand(sql, conn);
-            AddParameters(cmd, parameters);
-            var result = await cmd.ExecuteScalarAsync();
-            return Convert.ToInt32(result);
+            return await SafeAsync(async () =>
+            {
+                sql = ReplaceIdentity(sql);
+
+                using var conn = await OpenAsync();
+                using var cmd = CreateCommand(sql, conn);
+                AddParameters(cmd, parameters);
+                var result = await cmd.ExecuteScalarAsync();
+                return Convert.ToInt32(result);
+            });
         }
 
         public int InsertAndGetId(string sql, object parameters = null)
         {
-            using var conn = Open();
-            using var cmd = CreateCommand(sql, conn);
-            AddParameters(cmd, parameters);
-            var result = cmd.ExecuteScalar();
-            return Convert.ToInt32(result);
-        }
+            return Safe(() =>
+            {
+                sql = ReplaceIdentity(sql);
 
+                using var conn = Open();
+                using var cmd = CreateCommand(sql, conn);
+                AddParameters(cmd, parameters);
+                var result = cmd.ExecuteScalar();
+                return Convert.ToInt32(result);
+            });
+        }
         #endregion
 
-        #region QUERY (RAW)
-
+        #region QUERY (SAFE + RETRY)
         public async Task<IReadOnlyList<T>> QueryAsync<T>(string sql, object parameters = null) where T : new()
         {
-            using var conn = await OpenAsync();
-            using var cmd = CreateCommand(sql, conn);
-            AddParameters(cmd, parameters);
-            using var reader = await cmd.ExecuteReaderAsync();
-            return MapToList<T>(reader);
+            return await SafeAsync(async () =>
+            {
+                using var conn = await OpenAsync();
+                using var cmd = CreateCommand(sql, conn);
+                AddParameters(cmd, parameters);
+                using var reader = await cmd.ExecuteReaderAsync();
+                return MapToList<T>(reader);
+            });
         }
 
         public IReadOnlyList<T> Query<T>(string sql, object parameters = null) where T : new()
         {
-            using var conn = Open();
-            using var cmd = CreateCommand(sql, conn);
-            AddParameters(cmd, parameters);
-            using var reader = cmd.ExecuteReader();
-            return MapToList<T>(reader);
+            return Safe(() =>
+            {
+                using var conn = Open();
+                using var cmd = CreateCommand(sql, conn);
+                AddParameters(cmd, parameters);
+                using var reader = cmd.ExecuteReader();
+                return MapToList<T>(reader);
+            });
         }
 
         public async Task<IReadOnlyList<Dictionary<string, object>>> QueryAsync(string sql, object parameters = null)
         {
-            using var conn = await OpenAsync();
-            using var cmd = CreateCommand(sql, conn);
-            AddParameters(cmd, parameters);
-            using var reader = await cmd.ExecuteReaderAsync();
-            return MapToDictionaryList(reader);
+            return await SafeAsync(async () =>
+            {
+                using var conn = await OpenAsync();
+                using var cmd = CreateCommand(sql, conn);
+                AddParameters(cmd, parameters);
+                using var reader = await cmd.ExecuteReaderAsync();
+                return MapToDictionaryList(reader);
+            });
         }
 
         public IReadOnlyList<Dictionary<string, object>> Query(string sql, object parameters = null)
         {
-            using var conn = Open();
-            using var cmd = CreateCommand(sql, conn);
-            AddParameters(cmd, parameters);
-            using var reader = cmd.ExecuteReader();
-            return MapToDictionaryList(reader);
+            return Safe(() =>
+            {
+                using var conn = Open();
+                using var cmd = CreateCommand(sql, conn);
+                AddParameters(cmd, parameters);
+                using var reader = cmd.ExecuteReader();
+                return MapToDictionaryList(reader);
+            });
         }
 
         public async Task<T?> QuerySingleAsync<T>(string sql, object parameters = null) where T : new()
@@ -179,58 +239,106 @@ namespace MyDbLib.Core.Base
 
         #endregion
 
-        #region INTERNAL TX EXECUTION
+        #region INTERNAL TX (NO RETRY)
 
         internal async Task<int> ExecuteInternalAsync(string sql, object parameters, DbConnection conn, DbTransaction tx)
         {
-            using var cmd = CreateCommand(sql, conn);
-            cmd.Transaction = tx;
-            AddParameters(cmd, parameters);
-            return await cmd.ExecuteNonQueryAsync();
+            try
+            {
+                using var cmd = CreateCommand(sql, conn);
+                cmd.Transaction = tx;
+                AddParameters(cmd, parameters);
+                return await cmd.ExecuteNonQueryAsync();
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException(
+                    $"Database transaction execute failed: {ex.Message}", ex);
+            }
         }
 
         internal int ExecuteInternal(string sql, object parameters, DbConnection conn, DbTransaction tx)
         {
-            using var cmd = CreateCommand(sql, conn);
-            cmd.Transaction = tx;
-            AddParameters(cmd, parameters);
-            return cmd.ExecuteNonQuery();
+            try
+            {
+                using var cmd = CreateCommand(sql, conn);
+                cmd.Transaction = tx;
+                AddParameters(cmd, parameters);
+                return cmd.ExecuteNonQuery();
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException(
+                    $"Database transaction execute failed: {ex.Message}", ex);
+            }
         }
 
         internal async Task<IReadOnlyList<T>> QueryInternalAsync<T>(string sql, object parameters, DbConnection conn, DbTransaction tx) where T : new()
         {
-            using var cmd = CreateCommand(sql, conn);
-            cmd.Transaction = tx;
-            AddParameters(cmd, parameters);
-            using var reader = await cmd.ExecuteReaderAsync();
-            return MapToList<T>(reader);
+            try
+            {
+                using var cmd = CreateCommand(sql, conn);
+                cmd.Transaction = tx;
+                AddParameters(cmd, parameters);
+                using var reader = await cmd.ExecuteReaderAsync();
+                return MapToList<T>(reader);
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException(
+                    $"Database transaction execute failed: {ex.Message}", ex);
+            }
         }
 
         internal IReadOnlyList<T> QueryInternal<T>(string sql, object parameters, DbConnection conn, DbTransaction tx) where T : new()
         {
-            using var cmd = CreateCommand(sql, conn);
-            cmd.Transaction = tx;
-            AddParameters(cmd, parameters);
-            using var reader = cmd.ExecuteReader();
-            return MapToList<T>(reader);
+            try
+            {
+                using var cmd = CreateCommand(sql, conn);
+                cmd.Transaction = tx;
+                AddParameters(cmd, parameters);
+                using var reader = cmd.ExecuteReader();
+                return MapToList<T>(reader);
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException(
+                    $"Database transaction execute failed: {ex.Message}", ex);
+            }
         }
 
         internal async Task<IReadOnlyList<Dictionary<string, object>>> QueryInternalAsync(string sql, object parameters, DbConnection conn, DbTransaction tx)
         {
-            using var cmd = CreateCommand(sql, conn);
-            cmd.Transaction = tx;
-            AddParameters(cmd, parameters);
-            using var reader = await cmd.ExecuteReaderAsync();
-            return MapToDictionaryList(reader);
+            try
+            {
+                using var cmd = CreateCommand(sql, conn);
+                cmd.Transaction = tx;
+                AddParameters(cmd, parameters);
+                using var reader = await cmd.ExecuteReaderAsync();
+                return MapToDictionaryList(reader);
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException(
+                    $"Database transaction execute failed: {ex.Message}", ex);
+            }
         }
 
         internal IReadOnlyList<Dictionary<string, object>> QueryInternal(string sql, object parameters, DbConnection conn, DbTransaction tx)
         {
-            using var cmd = CreateCommand(sql, conn);
-            cmd.Transaction = tx;
-            AddParameters(cmd, parameters);
-            using var reader = cmd.ExecuteReader();
-            return MapToDictionaryList(reader);
+            try
+            {
+                using var cmd = CreateCommand(sql, conn);
+                cmd.Transaction = tx;
+                AddParameters(cmd, parameters);
+                using var reader = cmd.ExecuteReader();
+                return MapToDictionaryList(reader);
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException(
+                    $"Database transaction execute failed: {ex.Message}", ex);
+            }
         }
 
         internal async Task<T?> QuerySingleInternalAsync<T>(string sql, object parameters, DbConnection conn, DbTransaction tx) where T : new()
@@ -245,14 +353,158 @@ namespace MyDbLib.Core.Base
             return list.Count == 0 ? default : list[0];
         }
 
+        internal async Task<int> InsertAndGetIdInternalAsync(string sql, object parameters, DbConnection conn, DbTransaction tx)
+        {
+            try
+            {
+                sql = ReplaceIdentity(sql);
+
+                using var cmd = CreateCommand(sql, conn);
+                cmd.Transaction = tx;
+                AddParameters(cmd, parameters);
+                var result = await cmd.ExecuteScalarAsync();
+                return Convert.ToInt32(result);
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException(
+                    $"Database transaction execute failed: {ex.Message}", ex);
+            }
+        }
+
+        internal int InsertAndGetIdInternal(string sql, object parameters, DbConnection conn, DbTransaction tx)
+        {
+            try
+            {
+                sql = ReplaceIdentity(sql);
+
+                using var cmd = CreateCommand(sql, conn);
+                cmd.Transaction = tx;
+                AddParameters(cmd, parameters);
+                var result = cmd.ExecuteScalar();
+                return Convert.ToInt32(result);
+            }
+            catch (DbException ex)
+            {
+                throw new DbLibException(
+                    $"Database transaction execute failed: {ex.Message}", ex);
+            }
+        }
         #endregion
+
+        #region RAW SAFE HELPERS
+
+        protected DbCommandResult SafeRaw(Func<int> action)
+        {
+            try
+            {
+                var affected = RetryPolicy.Execute(action);
+                return DbCommandResult.Ok(affected);
+            }
+            catch (DbException ex)
+            {
+                return DbCommandResult.Fail(
+                    ex.ErrorCode.ToString(),
+                    ex.Message
+                );
+            }
+            catch (Exception ex)
+            {
+                return DbCommandResult.Fail(
+                    "General Error",
+                    ex.Message
+                );
+            }
+        }
+
+        protected async Task<DbCommandResult> SafeRawAsync(Func<Task<int>> action)
+        {
+            try
+            {
+                var affected = await RetryPolicy.ExecuteAsync(action);
+                return DbCommandResult.Ok(affected);
+            }
+            catch (DbException ex)
+            {
+                return DbCommandResult.Fail(
+                    ex.ErrorCode.ToString(),
+                    ex.Message
+                );
+            }
+            catch (Exception ex)
+            {
+                return DbCommandResult.Fail(
+                    "General Error",
+                    ex.Message
+                );
+            }
+        }
+
+        #endregion
+
 
         #region MAPPERS
 
-        private static List<Dictionary<string, object>> MapToDictionaryList(DbDataReader reader) { /* same as before */ return null; }
+        private static List<Dictionary<string, object>> MapToDictionaryList(DbDataReader reader)
+        {
+            var list = new List<Dictionary<string, object>>();
 
-        private static List<T> MapToList<T>(DbDataReader reader) where T : new() { /* same as before */ return null; }
+            while (reader.Read())
+            {
+                var row = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
+                for (int i = 0; i < reader.FieldCount; i++)
+                {
+                    var val = reader.GetValue(i);
+                    row[reader.GetName(i)] = val == DBNull.Value ? null : val;
+                }
+
+                list.Add(row);
+            }
+
+            return list;
+        }
+
+        private static List<T> MapToList<T>(DbDataReader reader) where T : new()
+        {
+            var list = new List<T>();
+
+            var props = typeof(T)
+                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.CanWrite)
+                .ToArray();
+
+            var colMap = Enumerable.Range(0, reader.FieldCount)
+                .ToDictionary(
+                    i => reader.GetName(i),
+                    i => i,
+                    StringComparer.OrdinalIgnoreCase);
+
+            while (reader.Read())
+            {
+                var obj = new T();
+
+                foreach (var prop in props)
+                {
+                    if (!colMap.TryGetValue(prop.Name, out var index))
+                        continue;
+
+                    var val = reader.GetValue(index);
+                    if (val == DBNull.Value) continue;
+
+                    prop.SetValue(obj, Convert.ChangeType(val, prop.PropertyType));
+                }
+
+                list.Add(obj);
+            }
+
+            return list;
+        }
+
+        private string ReplaceIdentity(string sql)
+        {
+            return sql.Replace("{IDENTITY}", IdentitySelectSql);
+        }
         #endregion
     }
 }
