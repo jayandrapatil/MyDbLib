@@ -10,26 +10,26 @@ namespace MyDbLib.Core.Factories
     public sealed class DbDriverFactory : IDbDriverFactory
     {
         private readonly IServiceProvider _provider;
-        private readonly IReadOnlyDictionary<string, Type> _drivers;
+        private readonly IReadOnlyDictionary<string, Func<IServiceProvider, IDbDriver>> _factories;
 
         public DbDriverFactory(
-        IServiceProvider provider,
-        IEnumerable<DbDriverRegistration> registrations)
+            IServiceProvider provider,
+            IEnumerable<DbDriverRegistration> registrations)
         {
             _provider = provider;
 
-            _drivers = registrations.ToDictionary(
+            _factories = registrations.ToDictionary(
                 r => r.Name,
-                r => r.DriverType,
+                r => r.Factory,
                 StringComparer.OrdinalIgnoreCase);
         }
 
         public IDbDriver Get(string name)
         {
-            if (!_drivers.TryGetValue(name, out var type))
+            if (!_factories.TryGetValue(name, out var factory))
                 throw new DbLibException($"Database '{name}' is not registered.");
 
-            return (IDbDriver)_provider.GetRequiredService(type);
+            return factory(_provider); // always a new driver
         }
     }
 }

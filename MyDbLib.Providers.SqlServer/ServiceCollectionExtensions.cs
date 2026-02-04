@@ -24,18 +24,14 @@ namespace MyDbLib.Providers.SqlServer
             if (string.IsNullOrWhiteSpace(connectionString))
                 throw new ArgumentException("Connection string is required.", nameof(connectionString));
 
-            // Register SQL Server driver
-            services.AddSingleton<SqlServerDriver>(sp =>
-            {
-                // Driver is created, stores RetryPolicy in base class and returned to factory.Get()
-                var retryPolicy = sp.GetRequiredService<IRetryPolicy>();
-                return new SqlServerDriver(connectionString, retryPolicy);
-            });
-
             // Register metadata for the Core factory
-            services.AddSingleton(
-                new DbDriverRegistration(name, typeof(SqlServerDriver))
-            );
+            services.AddSingleton(new DbDriverRegistration(
+                name,
+                sp =>
+                {
+                    var retry = sp.GetRequiredService<IRetryPolicy>();
+                    return new SqlServerDriver(connectionString, retry);
+                }));
 
             return services;
         }

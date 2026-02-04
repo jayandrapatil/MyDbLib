@@ -5,6 +5,7 @@ using MyDbLib.Core.Extensions;
 using MyDbLib.Core.Helpers;
 using MyDbLib.Providers.SqlServer;
 using MyDbLib.Providers.MySql;
+using MyDbLib.Providers.Postgres;
 using SampleApp.Models;
 using System;
 using System.Threading.Tasks;
@@ -32,14 +33,23 @@ namespace SampleApp
                     connectionString: "Server=localhost;Port=3307;Database=myprojectdb;Uid=root;Pwd=admin"
                 );
 
+                services.AddMyDbLibPostgres(
+                    name: "Postgres",
+                    connectionString: "Host=localhost;Port=5432;Database=mydb;Username=postgres;Password=admin"
+                );
+
                 var provider = services.BuildServiceProvider();
                 var factory = provider.GetRequiredService<IDbDriverFactory>();
 
                 var sql = factory.Get("SQLServer");
+
                 var mysql = factory.Get("MySQL");
+
+                var pg = factory.Get("Postgres");
 
                 Console.WriteLine($"SQLServer Instances: {SqlServerDriver.InstanceCount}");
                 Console.WriteLine($"MySQL Instances: {MySqlDriver.InstanceCount}");
+                Console.WriteLine($"Postgres Instances: {PostgresDriver.InstanceCount}");
 
                 // ------------------------------------------------
                 // ASYNC CRUD (No Tx)
@@ -73,51 +83,51 @@ namespace SampleApp
                 // ASYNC TRANSACTION
                 // ------------------------------------------------
                 //Console.WriteLine("\n--- ASYNC TRANSACTION ---");
-                //using (var tx = await sql.BeginTransactionAsync())
-                //{
-                //    try
-                //    {
-                //        await DbCrudHelper.InsertAsync(tx, "Users",
-                //            new { Username = "TX1", Email = "tx1@gmail.com" });
+                using (var tx = await sql.BeginTransactionAsync())
+                {
+                    try
+                    {
+                        await DbCrudHelper.InsertAsync(tx, "Users",
+                            new { Username = "TX1", Email = "tx1@gmail.com" });
 
-                //        await DbCrudHelper.InsertAsync(tx, "Users",
-                //            new { Username = "TX2", Email = "tx2@gmail.com" });
+                        await DbCrudHelper.InsertAsync(tx, "Users",
+                            new { Username = "TX2", Email = "tx2@gmail.com" });
 
-                //        int newId = await DbCrudHelper.InsertAndGetIdAsync(tx, "Users",
-                //                new { Username = "Ajay", Email = "ajay@gmail.com" });
+                        int newId = await DbCrudHelper.InsertAndGetIdAsync(tx, "Users",
+                                new { Username = "Ajay", Email = "ajay@gmail.com" });
 
-                //        Console.WriteLine($"\nInserted ID: {newId}");
+                        Console.WriteLine($"\nInserted ID: {newId}");
 
-                //        var users = tx.Query<User>("SELECT * FROM Users");
-                //        foreach (var u in users)
-                //            Console.WriteLine($"{u.Id} - {u.Username} - {u.Email}");
+                        var users = tx.Query<User>("SELECT * FROM Users");
+                        foreach (var u in users)
+                            Console.WriteLine($"{u.Id} - {u.Username} - {u.Email}");
 
-                //        int up = await DbCrudHelper.UpdateAsync(tx, "Users",
-                //                new { Email = "ajay@new.com" },
-                //                new { Id = newId });
+                        int up = await DbCrudHelper.UpdateAsync(tx, "Users",
+                                new { Email = "ajay@new.com" },
+                                new { Id = newId });
 
-                //        Console.WriteLine($"\nUpdated rows: {up}");
+                        Console.WriteLine($"\nUpdated rows: {up}");
 
-                //        var users1 = tx.Query<User>("SELECT * FROM Users");
-                //        foreach (var u in users1)
-                //            Console.WriteLine($"{u.Id} - {u.Username} - {u.Email}");
+                        var users1 = tx.Query<User>("SELECT * FROM Users");
+                        foreach (var u in users1)
+                            Console.WriteLine($"{u.Id} - {u.Username} - {u.Email}");
 
-                //        int del = await DbCrudHelper.DeleteAsync(tx, "Users", new { Username = "TX1" });
-                //        Console.WriteLine($"\nDeleted rows: {del}");
+                        int del = await DbCrudHelper.DeleteAsync(tx, "Users", new { Username = "TX1" });
+                        Console.WriteLine($"\nDeleted rows: {del}");
 
-                //        var users2 = tx.Query<User>("SELECT * FROM Users");
-                //        foreach (var u in users2)
-                //            Console.WriteLine($"{u.Id} - {u.Username} - {u.Email}");
+                        var users2 = tx.Query<User>("SELECT * FROM Users");
+                        foreach (var u in users2)
+                            Console.WriteLine($"{u.Id} - {u.Username} - {u.Email}");
 
-                //        await tx.CommitAsync();
-                //        Console.WriteLine("\nTransaction committed");
-                //    }
-                //    catch (DbLibException ex)
-                //    {
-                //        await tx.RollbackAsync();
-                //        Console.WriteLine($"\nTransaction rolled back: {ex.Message} - {ex.InnerException} ");
-                //    }
-                //}
+                        await tx.CommitAsync();
+                        Console.WriteLine("\nTransaction committed");
+                    }
+                    catch (DbLibException ex)
+                    {
+                        await tx.RollbackAsync();
+                        Console.WriteLine($"\nTransaction rolled back: {ex.Message} - {ex.InnerException} ");
+                    }
+                }
 
                 // ------------------------------------------------
                 // RAW SQL with DbCommandResult

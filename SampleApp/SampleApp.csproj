@@ -84,6 +84,10 @@
       <Project>{446a0f59-d0d7-4eac-bf6a-ab220ea153a9}</Project>
       <Name>MyDbLib.Providers.MySql</Name>
     </ProjectReference>
+    <ProjectReference Include="..\MyDbLib.Providers.Postgres\MyDbLib.Providers.Postgres.csproj">
+      <Project>{bc7dc288-1077-4094-bf1a-1dc4fb4fd8cc}</Project>
+      <Name>MyDbLib.Providers.Postgres</Name>
+    </ProjectReference>
     <ProjectReference Include="..\MyDbLib.Providers.SqlServer\MyDbLib.Providers.SqlServer.csproj">
       <Project>{a6fe8a3c-8082-4250-926e-8470694ebda0}</Project>
       <Name>MyDbLib.Providers.SqlServer</Name>

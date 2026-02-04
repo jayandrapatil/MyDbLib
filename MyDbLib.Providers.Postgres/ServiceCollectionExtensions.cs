@@ -3,14 +3,11 @@ using MyDbLib.Api.Interfaces;
 using MyDbLib.Core.Factories;
 using System;
 
-namespace MyDbLib.Providers.MySql
+namespace MyDbLib.Providers.Postgres
 {
-    /// <summary>
-    /// Registers MySQL provider for MyDbLib.
-    /// </summary>
     public static class ServiceCollectionExtensions
     {
-        public static IServiceCollection AddMyDbLibMySql(
+        public static IServiceCollection AddMyDbLibPostgres(
             this IServiceCollection services,
             string name,
             string connectionString)
@@ -24,13 +21,12 @@ namespace MyDbLib.Providers.MySql
             if (string.IsNullOrWhiteSpace(connectionString))
                 throw new ArgumentException("Connection string is required.", nameof(connectionString));
 
-            // Register metadata for the Core factory
             services.AddSingleton(new DbDriverRegistration(
                 name,
                 sp =>
                 {
                     var retry = sp.GetRequiredService<IRetryPolicy>();
-                    return new MySqlDriver(connectionString, retry);
+                    return new PostgresDriver(connectionString, retry);
                 }));
 
             return services;

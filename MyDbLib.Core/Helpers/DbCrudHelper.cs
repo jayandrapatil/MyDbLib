@@ -124,7 +124,7 @@ namespace MyDbLib.Core.Helpers
         #endregion
 
         #region SQL BUILDERS
-        public static (string sql, object parameters) BuildInsert(string table, object data)
+        private static (string sql, object parameters) BuildInsert(string table, object data)
         {
             ValidateTable(table);
             var props = GetProps(data);
@@ -135,7 +135,7 @@ namespace MyDbLib.Core.Helpers
             return ($"INSERT INTO {table} ({cols}) VALUES ({vals});", data);
         }
 
-        public static (string sql, object parameters) BuildInsertAndGetId(string table, object data)
+        private static (string sql, object parameters) BuildInsertAndGetId(string table, object data)
         {
             ValidateTable(table);
             var props = GetProps(data);
@@ -151,7 +151,7 @@ namespace MyDbLib.Core.Helpers
             return (sql, data);
         }
 
-        public static (string sql, object parameters) BuildUpdate(string table, object data, object where)
+        private static (string sql, object parameters) BuildUpdate(string table, object data, object where)
         {
             ValidateTable(table);
 
@@ -170,7 +170,7 @@ namespace MyDbLib.Core.Helpers
             return (sql, dict);
         }
 
-        public static (string sql, object parameters) BuildDelete(string table, object where)
+        private static (string sql, object parameters) BuildDelete(string table, object where)
         {
             ValidateTable(table);
             var whereProps = GetProps(where);

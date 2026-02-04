@@ -1,4 +1,5 @@
-﻿using System;
+﻿using MyDbLib.Api;
+using System;
 
 namespace MyDbLib.Core.Factories
 {
@@ -9,12 +10,12 @@ namespace MyDbLib.Core.Factories
     public sealed class DbDriverRegistration
     {
         public string Name { get; }
-        public Type DriverType { get; }
+        public Func<IServiceProvider, IDbDriver> Factory { get; }
 
-        public DbDriverRegistration(string name, Type driverType)
+        public DbDriverRegistration(string name, Func<IServiceProvider, IDbDriver> factory)
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
-            DriverType = driverType ?? throw new ArgumentNullException(nameof(driverType));
+            Factory = factory ?? throw new ArgumentNullException(nameof(factory));
         }
     }
 }
